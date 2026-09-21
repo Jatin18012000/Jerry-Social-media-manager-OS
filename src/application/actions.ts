@@ -12,12 +12,10 @@ import { revalidatePath } from 'next/cache';
 
 import { getDb } from '@/db/runtime';
 import { createFetcherRegistry } from '@/adapters/fetchers';
+import type { ActionResult } from './action-result';
 import { ingestDueSources, ingestManualUrl } from './ingest';
 
-export interface ActionResult {
-  readonly ok: boolean;
-  readonly message: string;
-}
+export type { ActionResult } from './action-result';
 
 /** Decision D5's escape hatch: a human pastes a URL the feeds never saw. */
 export async function addManualUrl(

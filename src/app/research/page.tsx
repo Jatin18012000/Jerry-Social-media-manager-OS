@@ -2,7 +2,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 
 import { claims, researchItems, sources } from '@/db/schema';
 import { getDb } from '@/db/runtime';
-import { ManualUrlForm, PollButton } from './controls';
+import { ManualUrlForm, PollButton, PromoteForm } from './controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +149,11 @@ export default async function ResearchPage() {
               </p>
 
               {item.summary && <p className="summary">{item.summary}</p>}
+
+              <PromoteForm
+                researchItemId={item.id}
+                defaultTitle={item.title}
+              />
 
               {itemClaims.length > 0 && (
                 <div className="claims">

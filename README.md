@@ -8,8 +8,9 @@ Section references throughout the code (`§22`, `§39`, …) point at it. Where
 code enforces a PRD rule, the comment says which rule and why it is enforced
 where it is.
 
-**Status: M1 — research ingestion.** Sources are polled, items deduplicated
-and scored, claim candidates proposed with provenance. See _Milestones_ below.
+**Status: M2 — the brief loop.** Research is ingested and verified,
+opportunities fan out into platform variants, and briefs go out and come back
+as structured content. See _Milestones_ below.
 
 ---
 
@@ -40,6 +41,7 @@ iPhone on the same network (§46).
 | `npm run db:generate` | Generate SQL migrations from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Seed the §10 pillars and the §14 starting source list |
+| `npm run db:demo` | Insert one worked example through the whole loop (dev only) |
 
 ---
 
@@ -86,6 +88,7 @@ more than one level:
 | §40 nothing published without evidence | guard on entering `PUBLISHED` | `CHECK` on `publication_records` |
 | §39 no double publishing | idempotency key | `UNIQUE(content_item_id, platform)` |
 | §7.2 verified claims cite evidence | `mayBeStatedAsFact()` | `CHECK` on `claims` |
+| §16 unverified claims block progress | guard on entering `STRATEGY_READY` | — |
 
 The domain guards can be bypassed by a bug. The database constraints cannot.
 
@@ -97,8 +100,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 |---|---|---|
 | **M0** | Scaffold, schema, migrations, state machine, ADRs | ✅ done |
 | **M1** | Research ingestion: RSS, arXiv, Hacker News, manual URL drop; dedupe, claims, provenance | ✅ done |
-| M2 | Opportunities, brief composer, paste-back parser | next |
-| M3 | Approval queue, scheduler, manual publish, publication records | |
+| **M2** | Opportunities, brief composer, paste-back parser | ✅ done |
+| M3 | Approval queue, scheduler, manual publish, publication records | next |
 | M4 | OCR analytics ingestion | |
 | M5 | Learning engine and dashboard | |
 | M6+ | `LinkedInPublisher`, then `InstagramPublisher` when platform access clears | |
