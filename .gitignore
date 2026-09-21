@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Secrets — §41: never commit credentials
+.env
+.env.local
+.env.*.local
+
+# Local database (§34 local-first; the DB is machine state, not source)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local media assets
+media/
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Test / coverage
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
