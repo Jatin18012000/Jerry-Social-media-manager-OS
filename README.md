@@ -135,6 +135,14 @@ Approve.
   Keychain, not stored beside the database. **Not yet implemented** — no
   platform credentials exist yet.
 
+## What still needs a human
+
+- **Brand voice** (`/settings/brand`). §4 makes this ChatGPT's and Jatin's
+  deliverable, not engineering's. Until it is set, every brief carries a
+  warning and output stays generic — §57 Risk 1.
+- **Platform access.** A LinkedIn Page and developer app; a Meta developer app
+  and, if required, App Review. Publishing is manual until these exist.
+
 ## Decisions
 
 Architecture decision records are in [`docs/adr/`](docs/adr). Product

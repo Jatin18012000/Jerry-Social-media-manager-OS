@@ -109,7 +109,8 @@ export default async function Dashboard() {
             <strong>Brand voice is not configured.</strong> Every brief is
             being written to a generic placeholder, which is exactly the
             failure §57 calls Risk 1. This needs the real positioning, voice
-            and examples before output quality means anything.
+            and examples before output quality means anything.{' '}
+            <a href="/settings/brand">Set it up</a>.
           </p>
         </section>
       )}
