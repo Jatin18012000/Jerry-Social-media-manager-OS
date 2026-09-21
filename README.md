@@ -8,9 +8,10 @@ Section references throughout the code (`§22`, `§39`, …) point at it. Where
 code enforces a PRD rule, the comment says which rule and why it is enforced
 where it is.
 
-**Status: M2 — the brief loop.** Research is ingested and verified,
-opportunities fan out into platform variants, and briefs go out and come back
-as structured content. See _Milestones_ below.
+**Status: M3 — approval, scheduling and publishing.** The core loop is
+closed end to end: research → verified claims → brief → generation → QA →
+human approval → schedule → publish. Publishing is manual until platform
+access clears. See _Milestones_ below.
 
 ---
 
@@ -89,6 +90,7 @@ more than one level:
 | §39 no double publishing | idempotency key | `UNIQUE(content_item_id, platform)` |
 | §7.2 verified claims cite evidence | `mayBeStatedAsFact()` | `CHECK` on `claims` |
 | §16 unverified claims block progress | guard on entering `STRATEGY_READY` | — |
+| §39 one job per item/platform/slot | idempotency key + atomic job claim | `UNIQUE(idempotency_key)` |
 
 The domain guards can be bypassed by a bug. The database constraints cannot.
 
@@ -101,8 +103,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | **M0** | Scaffold, schema, migrations, state machine, ADRs | ✅ done |
 | **M1** | Research ingestion: RSS, arXiv, Hacker News, manual URL drop; dedupe, claims, provenance | ✅ done |
 | **M2** | Opportunities, brief composer, paste-back parser | ✅ done |
-| M3 | Approval queue, scheduler, manual publish, publication records | next |
-| M4 | OCR analytics ingestion | |
+| **M3** | QA gate, approval queue, scheduler, manual publish, publication records | ✅ done |
+| M4 | OCR analytics ingestion | next |
 | M5 | Learning engine and dashboard | |
 | M6+ | `LinkedInPublisher`, then `InstagramPublisher` when platform access clears | |
 

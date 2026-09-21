@@ -331,3 +331,56 @@ input[type='text'] {
   background: var(--bg);
   color: var(--text);
 }
+
+.review-card {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-card:last-child {
+  border-bottom: none;
+}
+
+.review-hook {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.qa {
+  margin: 0.5rem 0;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--border);
+}
+
+.qa p {
+  margin: 0.15rem 0;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+}
+
+input[type='datetime-local'] {
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* §46: the approval experience has to work on an iPad held in one hand. */
+@media (max-width: 640px) {
+  .form-row {
+    gap: 0.4rem;
+  }
+  .form-row button {
+    flex: 1 1 auto;
+    padding: 0.55rem 0.8rem;
+  }
+  .item-head {
+    flex-wrap: wrap;
+  }
+}

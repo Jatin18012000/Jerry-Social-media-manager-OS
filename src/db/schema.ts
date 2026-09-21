@@ -434,6 +434,9 @@ export const approvalEvents = sqliteTable(
 export type JobStatus =
   | 'PENDING'
   | 'RUNNING'
+  /** Manual publisher has handed the work to a person; §40 forbids calling
+   *  this published until they confirm they actually posted it. */
+  | 'AWAITING_HUMAN'
   | 'SUCCEEDED'
   | 'FAILED'
   | 'MISSED'

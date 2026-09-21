@@ -15,7 +15,9 @@ import { eq } from 'drizzle-orm';
 
 import { createDb } from '@/db/client';
 import { claims, researchItems, sources } from '@/db/schema';
-import { historyOf, moveTo, verifyClaim } from '@/application/content';
+import { act, historyOf, moveTo, verifyClaim } from '@/application/content';
+import { submitForReview } from '@/application/qa';
+import { scheduleItem } from '@/application/schedule';
 import {
   buildBrief,
   createContentItem,
@@ -123,7 +125,21 @@ const result = saveGeneration(db, {
   actor: 'demo',
 });
 
+// Through the QA gate, approval and scheduling, so the review and schedule
+// screens have something real on them.
+const qa = submitForReview(db, instagram, { actor: 'demo' });
+
+if (qa.ok) {
+  act(db, instagram, 'APPROVE', { actor: 'demo' });
+  scheduleItem(db, {
+    contentItemId: instagram,
+    runAt: new Date(Date.now() + 2 * 3_600_000),
+    actor: 'demo',
+  });
+}
+
 console.log(`opportunity ${opportunityId}`);
+console.log(`  qa passed: ${qa.ok} (${qa.report.warnings.length} warning(s))`);
 console.log(`  instagram variant ${instagram} — /content/${instagram}`);
 console.log(`  linkedin variant  ${linkedin} — /content/${linkedin}`);
 console.log(`  parsed: ${result.parsedOk}`);

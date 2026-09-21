@@ -20,6 +20,16 @@ export default [
     ],
   },
   {
+    rules: {
+      // A deliberately unused parameter, named with a leading underscore, is
+      // how an interface implementation says "I take this and ignore it".
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
     files: ['src/domain/**/*.ts', 'src/ports/**/*.ts'],
     rules: {
       'no-restricted-imports': [
