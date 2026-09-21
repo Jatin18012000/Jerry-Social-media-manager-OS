@@ -384,3 +384,54 @@ input[type='datetime-local'] {
     flex-wrap: wrap;
   }
 }
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table.metrics {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+table.metrics th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+table.metrics td {
+  padding: 0.4rem 0.5rem 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+table.metrics td:first-child {
+  white-space: normal;
+  min-width: 10rem;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.metric-field input {
+  font: inherit;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}

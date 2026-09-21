@@ -17,7 +17,10 @@ import { createDb } from '@/db/client';
 import { claims, researchItems, sources } from '@/db/schema';
 import { act, historyOf, moveTo, verifyClaim } from '@/application/content';
 import { submitForReview } from '@/application/qa';
-import { scheduleItem } from '@/application/schedule';
+import { confirmManualPublish, runDueJobs, scheduleItem } from '@/application/schedule';
+import { createPublisherRegistry } from '@/adapters/publishers';
+import { previewReading, saveReading } from '@/application/analytics';
+import type { Platform } from '@/domain/content';
 import {
   buildBrief,
   createContentItem,
@@ -129,18 +132,64 @@ const result = saveGeneration(db, {
 // screens have something real on them.
 const qa = submitForReview(db, instagram, { actor: 'demo' });
 
-if (qa.ok) {
+const INSIGHTS_PANEL = `
+Accounts reached
+4,210
+Likes
+312
+Comments
+24
+Saves
+88
+Shares
+15
+Follows
+37
+`;
+
+async function finish(): Promise<void> {
+  if (!qa.ok) return;
+
   act(db, instagram, 'APPROVE', { actor: 'demo' });
-  scheduleItem(db, {
-    contentItemId: instagram,
-    runAt: new Date(Date.now() + 2 * 3_600_000),
-    actor: 'demo',
+
+  // Schedule in the past-but-inside-grace so the runner picks it up now and
+  // the whole publish -> measure path is exercised.
+  const slot = new Date(Date.now() + 3 * 60_000);
+  scheduleItem(db, { contentItemId: instagram, runAt: slot, actor: 'demo' });
+
+  const registry = createPublisherRegistry('MANUAL');
+  await runDueJobs(db, (p: Platform) => registry.for(p), {
+    now: new Date(slot.getTime() + 60_000),
   });
+
+  confirmManualPublish(db, {
+    contentItemId: instagram,
+    externalUrl: 'https://instagram.com/p/demo',
+    confirmedBy: 'demo',
+  });
+
+  // §26/§40: read, then confirm. Only what was read gets stored.
+  const preview = previewReading(db, instagram, INSIGHTS_PANEL);
+  saveReading(db, {
+    contentItemId: instagram,
+    metrics: preview.parsed.metrics,
+    source: 'OCR',
+    rawText: INSIGHTS_PANEL,
+    confidence: preview.parsed.confidence,
+    confirmedBy: 'demo',
+  });
+
+  console.log(
+    `  metrics read: ${Object.keys(preview.parsed.metrics).join(', ')} ` +
+      `(confidence ${preview.parsed.confidence})`,
+  );
 }
 
-console.log(`opportunity ${opportunityId}`);
+void finish().then(() => {
+  console.log(`opportunity ${opportunityId}`);
 console.log(`  qa passed: ${qa.ok} (${qa.report.warnings.length} warning(s))`);
 console.log(`  instagram variant ${instagram} — /content/${instagram}`);
 console.log(`  linkedin variant  ${linkedin} — /content/${linkedin}`);
 console.log(`  parsed: ${result.parsedOk}`);
-console.log(`  history: ${historyOf(db, instagram).map((e) => e.toState).join(' -> ')}`);
+  console.log(`  history: ${historyOf(db, instagram).map((e) => e.toState).join(' -> ')}`);
+});

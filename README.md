@@ -8,10 +8,10 @@ Section references throughout the code (`§22`, `§39`, …) point at it. Where
 code enforces a PRD rule, the comment says which rule and why it is enforced
 where it is.
 
-**Status: M3 — approval, scheduling and publishing.** The core loop is
-closed end to end: research → verified claims → brief → generation → QA →
-human approval → schedule → publish. Publishing is manual until platform
-access clears. See _Milestones_ below.
+**Status: M4 — analytics capture.** The whole loop runs end to end: research
+→ verified claims → brief → generation → QA → human approval → schedule →
+publish → measure. Publishing is manual until platform access clears, and
+metrics come in by screenshot and local OCR. See _Milestones_ below.
 
 ---
 
@@ -72,7 +72,7 @@ implementation of a port, not a special case:
 |---|---|---|
 | `AIProvider` | `ManualProvider` — brief out, paste in | `AnthropicProvider`, `GeminiProvider` |
 | `Publisher` | `ManualPublisher` | `LinkedInPublisher`, `InstagramPublisher` |
-| `AnalyticsSource` | `OcrAnalyticsSource` | `InstagramInsightsSource` |
+| `AnalyticsSource` | pasted text / Tesseract OCR | `InstagramInsightsSource` |
 
 Switching is configuration (`src/config/env.ts`), not a rewrite. That is §64's
 `MODE=FOUNDATION | PRODUCTION` migration path.
@@ -104,8 +104,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | **M1** | Research ingestion: RSS, arXiv, Hacker News, manual URL drop; dedupe, claims, provenance | ✅ done |
 | **M2** | Opportunities, brief composer, paste-back parser | ✅ done |
 | **M3** | QA gate, approval queue, scheduler, manual publish, publication records | ✅ done |
-| M4 | OCR analytics ingestion | next |
-| M5 | Learning engine and dashboard | |
+| **M4** | OCR analytics capture, north-star metric | ✅ done |
+| M5 | Learning engine and dashboard | next |
 | M6+ | `LinkedInPublisher`, then `InstagramPublisher` when platform access clears | |
 
 M1–M5 have no external dependencies and do not wait on platform API access.
