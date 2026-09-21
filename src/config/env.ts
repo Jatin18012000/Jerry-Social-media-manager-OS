@@ -21,6 +21,9 @@ const schema = z.object({
    */
   SESSION_SECRET: z.string().min(32).optional(),
 
+  /** The single user's passphrase. Required alongside SESSION_SECRET (§41). */
+  APP_PASSPHRASE: z.string().min(1).optional(),
+
   /** §36 model routing. V1 is MANUAL under decision D3. */
   AI_GENERATION_MODE: z.enum(['MANUAL', 'ANTHROPIC', 'GEMINI']).default('MANUAL'),
   ANTHROPIC_API_KEY: z.string().optional(),

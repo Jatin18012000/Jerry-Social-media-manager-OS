@@ -1,13 +1,18 @@
 /**
  * Next.js instrumentation hook — runs once when the server starts.
  *
- * Used to start the scheduler's background runner. Guarded to the nodejs
- * runtime because it opens a SQLite handle and sets a timer, neither of which
- * exists on the edge runtime.
+ * Starts the scheduler's background runner.
+ *
+ * The runtime check wraps the import rather than returning early. Once
+ * middleware exists, Next compiles this file for the edge runtime as well,
+ * and only this shape lets it drop the Node-only branch — an early return
+ * leaves the import statically reachable and the edge build fails trying to
+ * resolve better-sqlite3.
  */
 
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
-  const { startRunner } = await import('./application/runner');
-  startRunner();
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { startRunner } = await import('./application/runner');
+    startRunner();
+  }
 }

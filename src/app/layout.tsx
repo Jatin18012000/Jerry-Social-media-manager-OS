@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import './globals.css';
+import { SignOutLink } from './sign-out';
 
 export const metadata: Metadata = {
   title: 'Social Media OS',
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <a href="/review">Review</a>
           <a href="/schedule">Schedule</a>
           <a href="/analytics">Analytics</a>
+          <SignOutLink />
         </nav>
         {children}
       </body>

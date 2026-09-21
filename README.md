@@ -21,7 +21,7 @@ Requires Node 22+.
 
 ```bash
 npm install
-cp .env.example .env.local     # then fill in SESSION_SECRET
+cp .env.example .env.local     # then set SESSION_SECRET and APP_PASSPHRASE
 npm run db:migrate
 npm run dev                    # http://localhost:3000
 ```
@@ -115,13 +115,25 @@ M1–M5 have no external dependencies and do not wait on platform API access.
 
 ## Security
 
+The app binds to `0.0.0.0` so an iPad can reach it (§46) — which means every
+device on the network can reach it. "Local network" is not a security
+boundary, and §22's approval gate is worthless if anyone on the wifi can click
+Approve.
+
+- **Authentication is required to run the app.** `SESSION_SECRET` (32+ chars)
+  and `APP_PASSPHRASE` must both be set. Middleware runs on every route and
+  fails closed: a missing secret redirects to a page explaining the
+  misconfiguration rather than serving the app.
+- Sessions are an expiry signed with HMAC-SHA256. The signature is verified
+  before the expiry is trusted, so a rewritten cookie cannot extend itself.
+- The passphrase comparison is timing-safe.
 - No secrets in this repository. `.env.local` is git-ignored; `.env.example`
   documents the shape (§41).
 - The local database and generated media are git-ignored — they are machine
   state, not source.
-- `SESSION_SECRET` is required because the app binds to the LAN.
 - Platform OAuth tokens will be encrypted at rest with a key from the macOS
-  Keychain, not stored beside the database.
+  Keychain, not stored beside the database. **Not yet implemented** — no
+  platform credentials exist yet.
 
 ## Decisions
 

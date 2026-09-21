@@ -455,3 +455,19 @@ table.metrics td:first-child {
 .tag-HYPOTHESIS { color: #58a6ff; border-color: #58a6ff55; }
 .tag-OBSERVATION { color: #8b949e; }
 .tag-INSUFFICIENT_DATA { color: #6e7681; }
+
+input[type='password'] {
+  font: inherit;
+  flex: 1 1 14rem;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.nav-signout {
+  margin-left: auto;
+  text-decoration: none;
+}
