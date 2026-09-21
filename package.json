@@ -16,11 +16,13 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.38.2",
+    "fast-xml-parser": "^5.11.1",
     "next": "^15.1.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

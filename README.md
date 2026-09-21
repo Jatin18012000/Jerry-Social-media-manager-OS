@@ -8,8 +8,8 @@ Section references throughout the code (`§22`, `§39`, …) point at it. Where
 code enforces a PRD rule, the comment says which rule and why it is enforced
 where it is.
 
-**Status: M0 — scaffold, schema and state machine.** No pipeline behaviour is
-wired up yet. See _Milestones_ below.
+**Status: M1 — research ingestion.** Sources are polled, items deduplicated
+and scored, claim candidates proposed with provenance. See _Milestones_ below.
 
 ---
 
@@ -39,17 +39,20 @@ iPhone on the same network (§46).
 | `npm run check` | typecheck + lint + test — run this before committing |
 | `npm run db:generate` | Generate SQL migrations from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply pending migrations |
+| `npm run db:seed` | Seed the §10 pillars and the §14 starting source list |
 
 ---
 
 ## Architecture
 
 ```
-src/app/       UI (Next.js App Router)
-src/config/    Environment and mode selection (§64)
-src/ports/     Interfaces — the only way external services enter
-src/domain/    Entities, state machine, invariants. Depends on nothing.
-src/db/        SQLite schema and client (Drizzle)
+src/app/          UI (Next.js App Router)
+src/application/  Use cases and server actions. Owns transactions.
+src/adapters/     Concrete implementations of ports (fetchers, HTTP)
+src/config/       Environment and mode selection (§64)
+src/ports/        Interfaces — the only way external services enter
+src/domain/       Entities, state machine, invariants. Depends on nothing.
+src/db/           SQLite schema and client (Drizzle)
 ```
 
 **The rule that holds it together:** `src/domain/**` and `src/ports/**` may not
@@ -93,8 +96,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | M | Scope | Status |
 |---|---|---|
 | **M0** | Scaffold, schema, migrations, state machine, ADRs | ✅ done |
-| M1 | Research ingestion: RSS, arXiv, Hacker News, manual URL drop; dedupe, claims, provenance | next |
-| M2 | Opportunities, brief composer, paste-back parser | |
+| **M1** | Research ingestion: RSS, arXiv, Hacker News, manual URL drop; dedupe, claims, provenance | ✅ done |
+| M2 | Opportunities, brief composer, paste-back parser | next |
 | M3 | Approval queue, scheduler, manual publish, publication records | |
 | M4 | OCR analytics ingestion | |
 | M5 | Learning engine and dashboard | |
