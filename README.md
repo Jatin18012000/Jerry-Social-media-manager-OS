@@ -8,10 +8,10 @@ Section references throughout the code (`§22`, `§39`, …) point at it. Where
 code enforces a PRD rule, the comment says which rule and why it is enforced
 where it is.
 
-**Status: M4 — analytics capture.** The whole loop runs end to end: research
-→ verified claims → brief → generation → QA → human approval → schedule →
-publish → measure. Publishing is manual until platform access clears, and
-metrics come in by screenshot and local OCR. See _Milestones_ below.
+**Status: M5 — the flywheel closes.** Research → verified claims → brief →
+generation → QA → human approval → schedule → publish → measure → learn →
+back into the next brief. Publishing is manual until platform access clears.
+See _Milestones_ below.
 
 ---
 
@@ -91,6 +91,7 @@ more than one level:
 | §7.2 verified claims cite evidence | `mayBeStatedAsFact()` | `CHECK` on `claims` |
 | §16 unverified claims block progress | guard on entering `STRATEGY_READY` | — |
 | §39 one job per item/platform/slot | idempotency key + atomic job claim | `UNIQUE(idempotency_key)` |
+| §29 no conclusions from small samples | tiered findings; `SUPPORTED` needs an experiment | — |
 
 The domain guards can be bypassed by a bug. The database constraints cannot.
 
@@ -105,8 +106,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | **M2** | Opportunities, brief composer, paste-back parser | ✅ done |
 | **M3** | QA gate, approval queue, scheduler, manual publish, publication records | ✅ done |
 | **M4** | OCR analytics capture, north-star metric | ✅ done |
-| M5 | Learning engine and dashboard | next |
-| M6+ | `LinkedInPublisher`, then `InstagramPublisher` when platform access clears | |
+| **M5** | Learning engine, findings, dashboard | ✅ done |
+| M6+ | `LinkedInPublisher`, then `InstagramPublisher` | blocked on platform access |
 
 M1–M5 have no external dependencies and do not wait on platform API access.
 

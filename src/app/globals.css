@@ -435,3 +435,23 @@ table.metrics td:first-child {
   background: var(--bg);
   color: var(--text);
 }
+
+.finding {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+
+.finding:last-child {
+  border-bottom: none;
+}
+
+/* §29 — the four statuses must never look interchangeable. An observation
+   and a supported finding are different kinds of claim. */
+.tag-SUPPORTED { color: #3fb950; border-color: #3fb95055; }
+.tag-HYPOTHESIS { color: #58a6ff; border-color: #58a6ff55; }
+.tag-OBSERVATION { color: #8b949e; }
+.tag-INSUFFICIENT_DATA { color: #6e7681; }

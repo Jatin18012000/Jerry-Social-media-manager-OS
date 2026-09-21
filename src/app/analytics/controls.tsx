@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useState, useTransition } from 'react';
 
 import type { ActionResult } from '@/application/action-result';
 import {
@@ -8,6 +8,7 @@ import {
   readMetrics,
   saveMetrics,
 } from '@/application/analytics-actions';
+import { recomputeLearning } from '@/application/learning-actions';
 
 const FIELDS = [
   ['impressions', 'Impressions'],
@@ -163,5 +164,30 @@ export function CaptureForm({
         </>
       )}
     </article>
+  );
+}
+
+/** Re-runs the §29 analysis over everything measured so far. */
+export function RecomputeButton() {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<ActionResult | null>(null);
+
+  return (
+    <span className="poll">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => setResult(await recomputeLearning()))
+        }
+      >
+        {pending ? 'Analysing…' : 'Recompute'}
+      </button>
+      {result && (
+        <span className={result.ok ? 'ok small' : 'error small'}>
+          {result.message}
+        </span>
+      )}
+    </span>
   );
 }

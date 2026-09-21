@@ -1,6 +1,7 @@
 import { getDb } from '@/db/runtime';
 import { awaitingMetrics, latestPerformance } from '@/application/analytics';
-import { CaptureForm } from './controls';
+import { gaps, presentableFindings } from '@/application/learning';
+import { CaptureForm, RecomputeButton } from './controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,8 @@ export default async function AnalyticsPage() {
   const db = getDb();
   const performance = latestPerformance(db);
   const pending = awaitingMetrics(db);
+  const findings = presentableFindings(db);
+  const insufficient = gaps(db);
 
   return (
     <main>
@@ -48,6 +51,50 @@ export default async function AnalyticsPage() {
           ))}
         </section>
       )}
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">What we have learned</h2>
+          <RecomputeButton />
+        </div>
+        <p className="muted small">
+          §29 draws a hard line between an observation and a conclusion. A
+          finding below the minimum sample size is never shown as either — it
+          is listed as a gap instead. Only a pre-registered experiment (§30)
+          can ever reach SUPPORTED; observational data stops at HYPOTHESIS.
+        </p>
+
+        {findings.length === 0 && (
+          <p className="muted">
+            Nothing stands up yet. That is the expected state until enough
+            posts have been measured.
+          </p>
+        )}
+
+        {findings.map((finding) => (
+          <div className="finding" key={finding.id}>
+            <span className={`tag tag-${finding.status}`}>{finding.status}</span>
+            <span>
+              {finding.summary}{' '}
+              <span className="muted small">
+                (n={finding.sampleSize}, confidence {finding.confidence})
+              </span>
+            </span>
+          </div>
+        ))}
+
+        {insufficient.length > 0 && (
+          <p className="muted small" style={{ marginTop: '0.75rem' }}>
+            {insufficient.length} segment(s) have too little data to say
+            anything about yet:{' '}
+            {insufficient
+              .slice(0, 8)
+              .map((f) => `${f.segment} (n=${f.sampleSize})`)
+              .join(', ')}
+            .
+          </p>
+        )}
+      </section>
 
       <section className="panel">
         <h2 className="panel-title">Performance</h2>
