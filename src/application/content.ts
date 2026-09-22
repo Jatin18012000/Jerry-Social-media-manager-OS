@@ -21,6 +21,7 @@ import {
   contentItemSources,
   contentItems,
   publicationRecords,
+  scheduleJobs,
 } from '@/db/schema';
 import {
   type ContentAction,
@@ -287,4 +288,145 @@ export function attachClaims(
       }
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Editing content — §23 "Edit"
+// ---------------------------------------------------------------------------
+
+export class EditRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EditRefusedError';
+  }
+}
+
+export interface ContentFields {
+  readonly hook?: string | null;
+  readonly body?: string | null;
+  readonly caption?: string | null;
+  readonly cta?: string | null;
+  readonly hashtags?: string | null;
+  readonly altText?: string | null;
+}
+
+/** States where editing changes nothing about approval, because none exists. */
+const FREELY_EDITABLE: readonly ContentState[] = [
+  'IDEA',
+  'RESEARCHING',
+  'RESEARCH_VERIFIED',
+  'STRATEGY_READY',
+  'GENERATING',
+  'QA',
+  'NEEDS_REVISION',
+  'READY_FOR_REVIEW',
+];
+
+/**
+ * States where an edit revokes approval rather than being refused.
+ *
+ * This is the rule that keeps §22 meaningful. If content could be edited
+ * after approval, the approval would be of nothing in particular — a person
+ * could approve one thing and a different thing could go out. So editing an
+ * approved item is allowed, and it un-approves it.
+ */
+const REVOKES_APPROVAL: readonly ContentState[] = ['APPROVED', 'SCHEDULED'];
+
+export interface EditResult {
+  readonly state: ContentState;
+  readonly approvalRevoked: boolean;
+}
+
+/**
+ * Updates the content fields of an item — §23's Edit action.
+ *
+ * Only the fields present in `fields` are written, so a partial edit does not
+ * blank the rest. This matters after a failed generation parse, where the
+ * point is to fill in what the parser could not read without losing what it
+ * could.
+ */
+export function editContent(
+  db: DB,
+  contentItemId: number,
+  fields: ContentFields,
+  opts: { actor?: string; note?: string; now?: Date } = {},
+): EditResult {
+  const now = opts.now ?? new Date();
+  const from = currentState(db, contentItemId);
+
+  if (
+    !FREELY_EDITABLE.includes(from) &&
+    !REVOKES_APPROVAL.includes(from)
+  ) {
+    // Published content cannot be retroactively changed: the record would
+    // then disagree with what an audience actually saw, and every analytic
+    // attached to it would be about different content.
+    throw new EditRefusedError(
+      `Content in ${from} cannot be edited. What was published is what was ` +
+        `published; create a new item instead.`,
+    );
+  }
+
+  const patch: Partial<typeof contentItems.$inferInsert> = {};
+  for (const key of [
+    'hook',
+    'body',
+    'caption',
+    'cta',
+    'hashtags',
+    'altText',
+  ] as const) {
+    if (fields[key] !== undefined) {
+      const value = fields[key];
+      patch[key] = typeof value === 'string' && value.trim() === '' ? null : value;
+    }
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return { state: from, approvalRevoked: false };
+  }
+
+  if (REVOKES_APPROVAL.includes(from)) {
+    // Cancel any pending job first — a scheduled post must not go out
+    // carrying text nobody approved.
+    db.update(scheduleJobs)
+      .set({ status: 'CANCELLED', updatedAt: now.getTime() })
+      .where(
+        and(
+          eq(scheduleJobs.contentItemId, contentItemId),
+          inArray(scheduleJobs.status, ['PENDING', 'MISSED']),
+        ),
+      )
+      .run();
+
+    moveTo(db, contentItemId, 'NEEDS_REVISION', {
+      ...(opts.actor !== undefined ? { actor: opts.actor } : {}),
+      note: opts.note ?? 'edited after approval — approval revoked',
+      patch: { ...patch, scheduledAt: null },
+      now,
+    });
+
+    return { state: 'NEEDS_REVISION', approvalRevoked: true };
+  }
+
+  db.transaction((tx) => {
+    tx.update(contentItems)
+      .set({ ...patch, updatedAt: now.getTime() })
+      .where(eq(contentItems.id, contentItemId))
+      .run();
+
+    tx.insert(approvalEvents)
+      .values({
+        contentItemId,
+        actor: opts.actor ?? 'jatin',
+        action: 'EDIT',
+        fromState: from,
+        toState: from,
+        note: opts.note ?? `edited: ${Object.keys(patch).join(', ')}`,
+        createdAt: now.getTime(),
+      })
+      .run();
+  });
+
+  return { state: from, approvalRevoked: false };
 }

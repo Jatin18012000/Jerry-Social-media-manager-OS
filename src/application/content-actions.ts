@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache';
 import { getDb } from '@/db/runtime';
 import type { ContentFormat, Platform } from '@/domain/content';
 import type { ActionResult } from './action-result';
-import { verifyClaim } from './content';
+import { EditRefusedError, editContent, verifyClaim } from './content';
 import {
   buildBrief,
   createContentItem,
@@ -182,5 +182,57 @@ export async function submitGeneration(
     };
   } catch (error) {
     return fail(error, 'Could not save that');
+  }
+}
+
+/**
+ * §23's Edit action, on the content fields themselves.
+ *
+ * Editing an approved item revokes the approval and cancels any pending
+ * schedule — otherwise the approval would be of nothing in particular. The
+ * result says so plainly rather than letting it happen quietly.
+ */
+export async function editContentFields(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const contentItemId = Number(formData.get('contentItemId'));
+
+  const field = (name: string): string | undefined => {
+    const raw = formData.get(name);
+    return raw === null ? undefined : String(raw);
+  };
+
+  try {
+    const result = editContent(
+      getDb(),
+      contentItemId,
+      {
+        hook: field('hook'),
+        body: field('body'),
+        caption: field('caption'),
+        cta: field('cta'),
+        hashtags: field('hashtags'),
+        altText: field('altText'),
+      },
+      { actor: 'jatin' },
+    );
+
+    revalidatePath(`/content/${contentItemId}`);
+    revalidatePath('/review');
+    revalidatePath('/schedule');
+
+    return {
+      ok: true,
+      message: result.approvalRevoked
+        ? 'Saved. This was approved, so the approval was revoked and any ' +
+          'schedule cancelled — it needs approving again.'
+        : 'Saved.',
+    };
+  } catch (error) {
+    if (error instanceof EditRefusedError) {
+      return { ok: false, message: error.message };
+    }
+    return fail(error, 'Could not save');
   }
 }

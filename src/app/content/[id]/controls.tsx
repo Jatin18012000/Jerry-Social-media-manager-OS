@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { ActionResult } from '@/application/action-result';
 import {
   composeBriefFor,
+  editContentFields,
   submitClaimVerification,
   submitGeneration,
 } from '@/application/content-actions';
@@ -210,5 +211,103 @@ export function ClaimVerifier({
         </form>
       )}
     </div>
+  );
+}
+
+const EDITABLE = [
+  ['hook', 'Hook', 2],
+  ['body', 'Body', 8],
+  ['caption', 'Caption', 5],
+  ['cta', 'CTA', 2],
+  ['hashtags', 'Hashtags', 2],
+  ['altText', 'Alt text', 2],
+] as const;
+
+/**
+ * Editing the content by hand — §23.
+ *
+ * The parser tells you to fill in what it could not read; this is where that
+ * happens. It also covers the ordinary case of just wanting to change a word.
+ *
+ * The warning about revoking approval is shown before you edit, not after,
+ * because finding out afterwards that you have unapproved and unscheduled a
+ * post is a bad surprise.
+ */
+export function EditContentForm({
+  contentItemId,
+  state,
+  fields,
+}: {
+  contentItemId: number;
+  state: string;
+  fields: Record<string, string | null>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [result, action, pending] = useActionState<ActionResult | null, FormData>(
+    editContentFields,
+    null,
+  );
+
+  const locked = ['PUBLISHING', 'PUBLISHED', 'ANALYZING', 'LEARNED', 'REJECTED', 'CANCELLED'].includes(state);
+  const revokesApproval = state === 'APPROVED' || state === 'SCHEDULED';
+
+  if (locked) {
+    return (
+      <p className="muted small">
+        Content in {state} cannot be edited — what was published is what was
+        published. Create a new item instead.
+      </p>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="link-button" onClick={() => setOpen(true)}>
+        Edit the content
+      </button>
+    );
+  }
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="contentItemId" value={contentItemId} />
+
+      {revokesApproval && (
+        <p className="warn small">
+          This item is {state}. Saving an edit will revoke its approval and
+          cancel any schedule — §22 means a person approved the exact text
+          that goes out.
+        </p>
+      )}
+
+      {EDITABLE.map(([name, label, rows]) => (
+        <div className="field" key={name}>
+          <label className="field-label" htmlFor={`${name}-${contentItemId}`}>
+            {label}
+          </label>
+          <textarea
+            id={`${name}-${contentItemId}`}
+            name={name}
+            rows={rows}
+            defaultValue={fields[name] ?? ''}
+            style={{ minHeight: `${rows * 1.6}rem` }}
+          />
+        </div>
+      ))}
+
+      <div className="form-row">
+        <button type="submit" disabled={pending}>
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="secondary" onClick={() => setOpen(false)}>
+          Done
+        </button>
+        {result && (
+          <p className={result.ok ? 'ok small' : 'error small'}>
+            {result.message}
+          </p>
+        )}
+      </div>
+    </form>
   );
 }

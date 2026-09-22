@@ -5,7 +5,12 @@ import { briefs, contentItems, generations } from '@/db/schema';
 import { getDb } from '@/db/runtime';
 import { scopedClaims, scopedClaimsWithIds } from '@/application/opportunities';
 import { historyOf } from '@/application/content';
-import { BriefPanel, ClaimVerifier, ComposeBriefButton } from './controls';
+import {
+  BriefPanel,
+  ClaimVerifier,
+  ComposeBriefButton,
+  EditContentForm,
+} from './controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,8 +132,7 @@ export default async function ContentPage({
         )}
       </section>
 
-      {(item.hook || item.body || item.caption) && (
-        <section className="panel">
+      <section className="panel">
           <h2 className="panel-title">Content</h2>
           {latestGeneration && !latestGeneration.parsedOk && (
             <p className="warn small">
@@ -172,8 +176,26 @@ export default async function ContentPage({
               <p className="field-value">{item.altText}</p>
             </div>
           )}
+
+          {!item.hook && !item.body && !item.caption && (
+            <p className="muted small">
+              Nothing written yet. Compose a brief above, or write it by hand.
+            </p>
+          )}
+
+          <EditContentForm
+            contentItemId={contentItemId}
+            state={item.state}
+            fields={{
+              hook: item.hook,
+              body: item.body,
+              caption: item.caption,
+              cta: item.cta,
+              hashtags: item.hashtags,
+              altText: item.altText,
+            }}
+          />
         </section>
-      )}
 
       <section className="panel">
         <h2 className="panel-title">History</h2>
