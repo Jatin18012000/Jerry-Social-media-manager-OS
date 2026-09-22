@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import type { DB } from '@/db/client';
 import { contentItems, systemEvents } from '@/db/schema';
 import { type QaReport, runQa } from '@/domain/qa';
+import { createInAppNotifier } from '@/adapters/notifiers/in-app-notifier';
 import { activeBrand, scopedClaims } from './opportunities';
 import { moveTo } from './content';
 
@@ -75,6 +76,30 @@ export function submitForReview(
       ? `QA passed with ${report.warnings.length} warning(s)`
       : 'QA passed'
     : `QA blocked: ${report.blockers.map((b) => b.code).join(', ')}`;
+
+  if (report.passed) {
+    const item = db
+      .select({
+        platform: contentItems.platform,
+        format: contentItems.format,
+      })
+      .from(contentItems)
+      .where(eq(contentItems.id, contentItemId))
+      .get();
+
+    createInAppNotifier(db).notifySync({
+      kind: 'CONTENT_READY_FOR_REVIEW',
+      title: `${item?.platform} ${item?.format} is ready for review`,
+      body:
+        report.warnings.length > 0
+          ? `QA passed with ${report.warnings.length} warning(s).`
+          : 'QA passed with no warnings.',
+      contentItemId,
+      // One notification per item, refreshed if it comes back round.
+      dedupeKey: `review:${contentItemId}`,
+      ...(opts.now !== undefined ? { now: opts.now } : {}),
+    });
+  }
 
   moveTo(db, contentItemId, report.passed ? 'READY_FOR_REVIEW' : 'NEEDS_REVISION', {
     ...(opts.actor !== undefined ? { actor: opts.actor } : { actor: 'qa' }),

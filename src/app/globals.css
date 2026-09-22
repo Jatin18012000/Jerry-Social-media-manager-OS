@@ -471,3 +471,28 @@ input[type='password'] {
   margin-left: auto;
   text-decoration: none;
 }
+
+.notification {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification:last-child {
+  border-bottom: none;
+}
+
+.tag-sev-ERROR { color: #f85149; border-color: #f8514955; }
+.tag-sev-WARN { color: #d29922; border-color: #d2992255; }
+.tag-sev-INFO { color: var(--muted); }
+
+.nav-count {
+  display: inline-block;
+  min-width: 1.15rem;
+  text-align: center;
+  font-size: 0.7rem;
+  line-height: 1.15rem;
+  border-radius: 999px;
+  background: #f85149;
+  color: #fff;
+  margin-left: 0.25rem;
+}

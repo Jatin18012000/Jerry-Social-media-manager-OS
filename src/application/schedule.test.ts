@@ -10,6 +10,7 @@ import {
   claims,
   contentItems,
   publicationRecords,
+  notifications,
   researchItems,
   scheduleJobs,
   sources,
@@ -513,5 +514,83 @@ describe('queues', () => {
       'PUBLISHING',
       'PUBLISHED',
     ]);
+  });
+});
+
+describe('notifications — PRD §47', () => {
+  it('announces content that is ready for review', () => {
+    approvedItem();
+    const rows = db.select().from(notifications).all();
+    expect(rows.some((n) => n.kind === 'CONTENT_READY_FOR_REVIEW')).toBe(true);
+  });
+
+  it('announces a missed window with a decision to make', async () => {
+    const id = approvedItem();
+    scheduleItem(db, { contentItemId: id, runAt: SLOT, now: NOW });
+    await runDueJobs(db, manualFor, {
+      now: new Date(SLOT.getTime() + 7 * 3_600_000),
+    });
+
+    const missed = db
+      .select()
+      .from(notifications)
+      .all()
+      .find((n) => n.kind === 'JOB_MISSED');
+
+    expect(missed).toBeDefined();
+    expect(missed?.severity).toBe('WARN');
+    expect(missed?.body).toContain('Reschedule');
+  });
+
+  it('announces an exhausted publish failure', async () => {
+    const id = approvedItem();
+    scheduleItem(db, { contentItemId: id, runAt: SLOT, now: NOW });
+
+    await runDueJobs(
+      db,
+      () => stubPublisher({ outcome: 'FAILED', error: 'boom', retryable: false }),
+      { now: SLOT },
+    );
+
+    const failed = db
+      .select()
+      .from(notifications)
+      .all()
+      .find((n) => n.kind === 'PUBLISH_FAILED');
+
+    expect(failed?.severity).toBe('ERROR');
+    // §40: it must be clear that nothing went out.
+    expect(failed?.body).toContain('Nothing was marked as published');
+  });
+
+  it('does not announce a retryable failure that will be retried', async () => {
+    const id = approvedItem();
+    scheduleItem(db, { contentItemId: id, runAt: SLOT, now: NOW });
+
+    await runDueJobs(
+      db,
+      () => stubPublisher({ outcome: 'FAILED', error: 'rate limited', retryable: true }),
+      { now: SLOT },
+    );
+
+    // Interrupting someone for a transient failure the system will handle
+    // itself is how an inbox becomes noise.
+    expect(
+      db.select().from(notifications).all().some((n) => n.kind === 'PUBLISH_FAILED'),
+    ).toBe(false);
+  });
+
+  it('does not repeat a missed-window notification on every poll', async () => {
+    const id = approvedItem();
+    scheduleItem(db, { contentItemId: id, runAt: SLOT, now: NOW });
+    const late = new Date(SLOT.getTime() + 7 * 3_600_000);
+
+    await runDueJobs(db, manualFor, { now: late });
+    await runDueJobs(db, manualFor, { now: late });
+    await runDueJobs(db, manualFor, { now: late });
+
+    expect(
+      db.select().from(notifications).all().filter((n) => n.kind === 'JOB_MISSED'),
+    ).toHaveLength(1);
   });
 });

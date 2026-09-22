@@ -34,6 +34,7 @@ import {
   validateScheduleTime,
 } from '@/domain/schedule';
 import type { PublishRequest, Publisher } from '@/ports';
+import { createInAppNotifier } from '@/adapters/notifiers/in-app-notifier';
 import { moveTo } from './content';
 
 export class ScheduleError extends Error {}
@@ -246,6 +247,18 @@ export async function runDueJobs(
         })
         .run();
 
+      // D2: the machine was asleep. This needs a decision, not a log line.
+      createInAppNotifier(db).notifySync({
+        kind: 'JOB_MISSED',
+        title: 'A scheduled post missed its window',
+        body:
+          `It was due ${decision.lateByMinutes} minutes ago and was not ` +
+          'published. Reschedule it, publish it anyway, or cancel it.',
+        contentItemId: row.contentItemId,
+        dedupeKey: `missed:${row.id}`,
+        now,
+      });
+
       report.missed += 1;
       continue;
     }
@@ -413,6 +426,17 @@ function failJob(
     .run();
 
   if (exhausted) {
+    createInAppNotifier(db).notifySync({
+      kind: 'PUBLISH_FAILED',
+      title: 'Publishing failed',
+      body:
+        `After ${attempts} attempt(s): ${error}. Nothing was marked as ` +
+        'published, and the item is back for revision.',
+      contentItemId,
+      dedupeKey: `publish-failed:${jobId}`,
+      now,
+    });
+
     // §40: never left in PUBLISHING, never marked published. It goes to a
     // human.
     const state = db

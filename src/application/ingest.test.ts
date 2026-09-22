@@ -6,7 +6,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { DB } from '@/db/client';
 import * as schema from '@/db/schema';
-import { claims, contentPillars, researchItems, sources, systemEvents } from '@/db/schema';
+import {
+  claims,
+  contentPillars,
+  notifications,
+  researchItems,
+  sources,
+  systemEvents,
+} from '@/db/schema';
 import type { FetchedItem, SourceFetcher } from '@/ports';
 import {
   dueSources,
@@ -449,5 +456,49 @@ describe('triageQueue', () => {
     );
 
     expect(triageQueue(db)).toHaveLength(1);
+  });
+});
+
+describe('notifications — PRD §47', () => {
+  it('announces a source that has stopped responding', async () => {
+    const sourceId = seedSource('OpenAI Blog');
+    await ingestSource(db, sourceId, () => failingFetcher('connection reset'));
+
+    const failure = db
+      .select()
+      .from(notifications)
+      .all()
+      .find((n) => n.kind === 'SYSTEM_FAILURE');
+
+    expect(failure).toBeDefined();
+    expect(failure?.title).toContain('OpenAI Blog');
+    expect(failure?.severity).toBe('ERROR');
+  });
+
+  it('does not pile up a notification per failed poll', async () => {
+    // A source failing for a week should be one unread item, not 168.
+    const sourceId = seedSource();
+    for (let i = 0; i < 10; i += 1) {
+      await ingestSource(db, sourceId, () => failingFetcher('still down'));
+    }
+
+    expect(db.select().from(notifications).all()).toHaveLength(1);
+  });
+
+  it('keeps separate failing sources separate', async () => {
+    const a = seedSource('Source A');
+    const b = seedSource('Source B');
+    await ingestSource(db, a, () => failingFetcher('down'));
+    await ingestSource(db, b, () => failingFetcher('down'));
+
+    expect(db.select().from(notifications).all()).toHaveLength(2);
+  });
+
+  it('says nothing when a source is working', async () => {
+    const sourceId = seedSource();
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([{ title: 'Fine', url: 'https://example.com/ok' }]),
+    );
+    expect(db.select().from(notifications).all()).toHaveLength(0);
   });
 });

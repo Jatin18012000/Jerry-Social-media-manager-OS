@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import './globals.css';
-import { SignOutLink } from './sign-out';
+import { Nav } from './nav';
 
 export const metadata: Metadata = {
   title: 'Social Media OS',
@@ -13,16 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <nav className="top">
-          <a href="/">Overview</a>
-          <a href="/research">Research</a>
-          <a href="/opportunities">Opportunities</a>
-          <a href="/review">Review</a>
-          <a href="/schedule">Schedule</a>
-          <a href="/analytics">Analytics</a>
-          <a href="/settings/brand">Brand</a>
-          <SignOutLink />
-        </nav>
+        <Nav />
         {children}
       </body>
     </html>

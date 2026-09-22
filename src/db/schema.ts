@@ -680,6 +680,39 @@ export const costRecords = sqliteTable(
   (t) => [index('cost_records_incurred_idx').on(t.incurredAt)],
 );
 
+/**
+ * Notifications — §47.
+ *
+ * Distinct from system_events, which logs everything that happened for
+ * observability (§43). A notification is *addressed to a person* and carries
+ * read state, so the two answer different questions: "what did the system do"
+ * versus "what still needs me".
+ *
+ * §48: email is a channel for these, never the database or the orchestration
+ * mechanism. The database row is the notification; a channel may later deliver
+ * it.
+ */
+export const notifications = sqliteTable(
+  'notifications',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    kind: text('kind').notNull(),
+    severity: text('severity').$type<EventSeverity>().notNull().default('INFO'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    contentItemId: integer('content_item_id').references(() => contentItems.id),
+    /** Collapses repeats of the same thing; see the notifier adapter. */
+    dedupeKey: text('dedupe_key'),
+    readAt: integer('read_at'),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    index('notifications_read_idx').on(t.readAt),
+    index('notifications_created_idx').on(t.createdAt),
+    uniqueIndex('notifications_dedupe_idx').on(t.dedupeKey),
+  ],
+);
+
 export type EventSeverity = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 export const systemEvents = sqliteTable(

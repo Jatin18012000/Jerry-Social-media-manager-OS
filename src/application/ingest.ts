@@ -27,6 +27,7 @@ import {
   dedupeKey,
 } from '@/domain/dedupe';
 import type { FetchedItem, SourceFetcher, StructuredProvider } from '@/ports';
+import { createInAppNotifier } from '@/adapters/notifiers/in-app-notifier';
 import { classifyResearchItem } from './classify';
 
 export interface IngestReport {
@@ -113,6 +114,16 @@ export async function ingestSource(
         payload: JSON.stringify({ sourceId, source: source.name, message }),
       })
       .run();
+
+    // One notification per source however long it keeps failing — an inbox
+    // with a hundred copies of the same thing is an inbox nobody reads.
+    createInAppNotifier(db).notifySync({
+      kind: 'SYSTEM_FAILURE',
+      title: `${source.name} is not responding`,
+      body: `${message}. Research from this source has stopped arriving.`,
+      dedupeKey: `source-failing:${sourceId}`,
+      now,
+    });
 
     return { ...report, failed: 1, errors: [message] };
   }
