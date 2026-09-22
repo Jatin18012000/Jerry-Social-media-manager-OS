@@ -202,3 +202,57 @@ export interface Notifier {
   readonly name: string;
   notify(notification: Notification): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// StructuredProvider — §35, §36, and the automation guide's §7
+// ---------------------------------------------------------------------------
+
+/**
+ * A request for structured output from a model.
+ *
+ * Separate from `AIProvider` because the two do different jobs. `AIProvider`
+ * produces prose for a human to review; this produces a typed judgement the
+ * application acts on — a classification, a score, a tag. Under decision D3
+ * generation stays human; only this side is automated.
+ */
+export interface StructuredTask<T> {
+  /** Names the job, for logging and cost attribution (§43, §44). */
+  readonly task: string;
+  readonly instruction: string;
+  readonly input: unknown;
+  /** The caller validates the output; the model is never trusted to. */
+  readonly parse: (raw: unknown) => T | null;
+  readonly temperature?: number;
+}
+
+/**
+ * Normalised result plus metadata.
+ *
+ * `output` is null on any failure — unreachable model, malformed JSON, output
+ * that did not satisfy the schema. The caller then falls back. A provider must
+ * never return a partially-valid object as if it were valid, because a
+ * half-parsed classification is worse than none: it looks usable.
+ */
+export interface StructuredRun<T> {
+  readonly output: T | null;
+  readonly provider: string;
+  readonly model: string | null;
+  readonly durationMs: number;
+  readonly status: 'OK' | 'UNAVAILABLE' | 'INVALID_OUTPUT' | 'ERROR';
+  readonly error?: string;
+}
+
+/**
+ * Implementations: OllamaProvider (local Qwen, free). Anthropic or Gemini
+ * could implement the same port if a budget is ever authorised.
+ *
+ * `available()` exists because the local model is genuinely optional — the
+ * laptop may not be running Ollama, and the system must degrade to its
+ * deterministic heuristics rather than fail.
+ */
+export interface StructuredProvider {
+  readonly name: string;
+  readonly model: string | null;
+  available(): Promise<boolean>;
+  run<T>(task: StructuredTask<T>): Promise<StructuredRun<T>>;
+}

@@ -18,13 +18,7 @@
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 
 import type { DB } from '@/db/client';
-import {
-  claims,
-  contentPillars,
-  researchItems,
-  sources,
-  systemEvents,
-} from '@/db/schema';
+import { claims, researchItems, sources, systemEvents } from '@/db/schema';
 import { extractClaimCandidates } from '@/domain/claim-extraction';
 import {
   type DuplicateCandidate,
@@ -32,8 +26,8 @@ import {
   classifyDuplicate,
   dedupeKey,
 } from '@/domain/dedupe';
-import { type PillarTerms, scoreRelevance } from '@/domain/relevance';
-import type { FetchedItem, SourceFetcher } from '@/ports';
+import type { FetchedItem, SourceFetcher, StructuredProvider } from '@/ports';
+import { classifyResearchItem } from './classify';
 
 export interface IngestReport {
   readonly sourceId: number;
@@ -50,30 +44,6 @@ export interface IngestReport {
 const DEDUPE_LOOKBACK_HOURS = 24 * 14;
 const DEDUPE_CANDIDATE_LIMIT = 400;
 
-/**
- * Pillar keyword terms.
- *
- * §14 requires the source list to be configurable and §10 allows new pillars,
- * so these live in the pillar rows' description column as a comma-separated
- * list rather than in code.
- */
-export function pillarTermsFrom(
-  rows: readonly {
-    id: number;
-    slug: string;
-    description: string | null;
-  }[],
-): PillarTerms[] {
-  return rows.map((row) => ({
-    pillarId: row.id,
-    slug: row.slug,
-    terms: (row.description ?? '')
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter((t) => t.length > 0),
-  }));
-}
-
 function toDate(value: number | null): Date | undefined {
   return value === null ? undefined : new Date(value);
 }
@@ -89,7 +59,7 @@ export async function ingestSource(
   db: DB,
   sourceId: number,
   fetcherFor: (kind: SourceFetcher['kind']) => SourceFetcher,
-  opts: { now?: Date } = {},
+  opts: { now?: Date; classifier?: StructuredProvider | null } = {},
 ): Promise<IngestReport> {
   const now = opts.now ?? new Date();
 
@@ -149,18 +119,6 @@ export async function ingestSource(
 
   report.fetched = items.length;
 
-  const pillars = pillarTermsFrom(
-    db
-      .select({
-        id: contentPillars.id,
-        slug: contentPillars.slug,
-        description: contentPillars.description,
-      })
-      .from(contentPillars)
-      .where(eq(contentPillars.active, true))
-      .all(),
-  );
-
   const recent: DuplicateCandidate[] = db
     .select({
       id: researchItems.id,
@@ -205,9 +163,13 @@ export async function ingestSource(
         continue;
       }
 
-      const relevance = scoreRelevance(
+      // Local model when it is running, deterministic heuristics when it is
+      // not. Both paths are recorded in agent_runs (§43).
+      const classification = await classifyResearchItem(
+        db,
         { title: item.title, summary: item.summary },
-        pillars,
+        opts.classifier ?? null,
+        { now },
       );
 
       const inserted = db
@@ -222,7 +184,7 @@ export async function ingestSource(
           dedupeKey: dedupeKey(item.title),
           // A soft duplicate is stored and linked, never dropped (§7.4).
           duplicateOfId: verdict.isDuplicate ? (verdict.of ?? null) : null,
-          relevanceScore: relevance.score,
+          relevanceScore: classification.relevance,
           status: verdict.isDuplicate ? 'DUPLICATE' : 'NEW',
           verificationStatus: 'UNVERIFIED',
         })
@@ -312,13 +274,18 @@ export function dueSources(db: DB, now: Date = new Date()): number[] {
 export async function ingestDueSources(
   db: DB,
   fetcherFor: (kind: SourceFetcher['kind']) => SourceFetcher,
-  opts: { now?: Date } = {},
+  opts: { now?: Date; classifier?: StructuredProvider | null } = {},
 ): Promise<IngestReport[]> {
   const now = opts.now ?? new Date();
   const reports: IngestReport[] = [];
 
   for (const sourceId of dueSources(db, now)) {
-    reports.push(await ingestSource(db, sourceId, fetcherFor, { now }));
+    reports.push(
+      await ingestSource(db, sourceId, fetcherFor, {
+        now,
+        classifier: opts.classifier ?? null,
+      }),
+    );
   }
 
   return reports;
@@ -335,7 +302,11 @@ export async function ingestManualUrl(
   db: DB,
   url: string,
   fetcher: SourceFetcher,
-  opts: { now?: Date; sourceName?: string } = {},
+  opts: {
+    now?: Date;
+    sourceName?: string;
+    classifier?: StructuredProvider | null;
+  } = {},
 ): Promise<IngestReport> {
   const now = opts.now ?? new Date();
 
@@ -371,7 +342,10 @@ export async function ingestManualUrl(
     fetch: () => fetcher.fetch({ url }),
   };
 
-  return ingestSource(db, manual.id, () => scoped, { now });
+  return ingestSource(db, manual.id, () => scoped, {
+    now,
+    classifier: opts.classifier ?? null,
+  });
 }
 
 /** Research items awaiting triage, most relevant first. */

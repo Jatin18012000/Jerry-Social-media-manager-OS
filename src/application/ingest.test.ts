@@ -13,7 +13,6 @@ import {
   ingestDueSources,
   ingestManualUrl,
   ingestSource,
-  pillarTermsFrom,
   triageQueue,
 } from './ingest';
 
@@ -76,20 +75,6 @@ beforeEach(() => {
   db = drizzle(sqlite, { schema }) as unknown as DB;
   migrate(db as never, { migrationsFolder: './drizzle' });
   seedPillars();
-});
-
-describe('pillarTermsFrom', () => {
-  it('reads comma-separated terms from the pillar row', () => {
-    const terms = pillarTermsFrom([
-      { id: 1, slug: 'ai-news', description: 'released, launch ,  available ' },
-    ]);
-    expect(terms[0]?.terms).toEqual(['released', 'launch', 'available']);
-  });
-
-  it('tolerates a pillar with no terms configured', () => {
-    const terms = pillarTermsFrom([{ id: 1, slug: 'x', description: null }]);
-    expect(terms[0]?.terms).toEqual([]);
-  });
 });
 
 describe('ingestSource', () => {

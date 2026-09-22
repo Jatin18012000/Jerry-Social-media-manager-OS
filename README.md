@@ -73,6 +73,7 @@ implementation of a port, not a special case:
 | `AIProvider` | `ManualProvider` — brief out, paste in | `AnthropicProvider`, `GeminiProvider` |
 | `Publisher` | `ManualPublisher` | `LinkedInPublisher`, `InstagramPublisher` |
 | `AnalyticsSource` | pasted text / Tesseract OCR | `InstagramInsightsSource` |
+| `StructuredProvider` | `OllamaProvider` (local Qwen), else heuristics | any hosted model |
 
 Switching is configuration (`src/config/env.ts`), not a rewrite. That is §64's
 `MODE=FOUNDATION | PRODUCTION` migration path.
@@ -134,6 +135,22 @@ Approve.
 - Platform OAuth tokens will be encrypted at rest with a key from the macOS
   Keychain, not stored beside the database. **Not yet implemented** — no
   platform credentials exist yet.
+
+## Local model (optional)
+
+Pillar, relevance and language classification prefer a local model over
+keyword matching. Set `OLLAMA_MODEL` to a tag `ollama list` reports on your
+machine and point `OLLAMA_BASE_URL` at the daemon.
+
+Leaving it unset is a supported configuration, not a degraded one — the
+deterministic heuristics are what runs by default, and they keep running when
+the daemon is down, the model is mid-download or a request times out. Every
+attempt is recorded in `agent_runs` either way, so whether the model is
+actually being used is a question the data answers.
+
+The model is never trusted to produce the right shape. Its output is parsed
+and then validated; an invented pillar, an out-of-range score or an unknown
+language all fall back rather than getting through.
 
 ## What still needs a human
 

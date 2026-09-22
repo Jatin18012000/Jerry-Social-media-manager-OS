@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getDb } from '@/db/runtime';
 import { createFetcherRegistry } from '@/adapters/fetchers';
+import { ollamaFromEnv } from '@/adapters/models/ollama-provider';
 import type { ActionResult } from './action-result';
 import { ingestDueSources, ingestManualUrl } from './ingest';
 
@@ -41,7 +42,9 @@ export async function addManualUrl(
 
   try {
     const registry = createFetcherRegistry();
-    const report = await ingestManualUrl(getDb(), raw, registry.MANUAL);
+    const report = await ingestManualUrl(getDb(), raw, registry.MANUAL, {
+      classifier: ollamaFromEnv(),
+    });
 
     revalidatePath('/research');
 
@@ -66,7 +69,9 @@ export async function addManualUrl(
 export async function pollSources(): Promise<ActionResult> {
   try {
     const registry = createFetcherRegistry();
-    const reports = await ingestDueSources(getDb(), (kind) => registry[kind]);
+    const reports = await ingestDueSources(getDb(), (kind) => registry[kind], {
+      classifier: ollamaFromEnv(),
+    });
 
     revalidatePath('/research');
 
