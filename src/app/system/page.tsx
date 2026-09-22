@@ -1,3 +1,4 @@
+import { vaultFromEnv } from '@/adapters/obsidian/vault-writer';
 import { getDb } from '@/db/runtime';
 import {
   agentUsage,
@@ -8,6 +9,7 @@ import {
   recentFailures,
   sourceHealth,
 } from '@/application/system';
+import { ObsidianExportButton } from './controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +42,7 @@ export default async function SystemPage() {
   const feeds = sourceHealth(db);
 
   const failing = feeds.filter((s) => s.lastError !== null);
+  const vault = vaultFromEnv();
 
   return (
     <main>
@@ -192,6 +195,31 @@ export default async function SystemPage() {
             </span>
           </div>
         ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="panel-title">Obsidian</h2>
+        <p className="muted small">
+          A one-way, human-readable projection of research, opportunities and
+          published posts. There is no importer — the database stays the system
+          of record because the vault cannot speak back. Anything you write
+          below the generated marker in a note survives a re-export.
+        </p>
+        {vault ? (
+          <>
+            <div className="row">
+              <span className="muted">Vault</span>
+              <span className="muted small">{vault.root}</span>
+            </div>
+            <ObsidianExportButton />
+          </>
+        ) : (
+          <p className="muted small">
+            Not configured. Set <code>OBSIDIAN_VAULT_PATH</code> in{' '}
+            <code>.env.local</code> and restart. Unset is a supported
+            configuration, not a missing step.
+          </p>
+        )}
       </section>
 
       <section className="panel">

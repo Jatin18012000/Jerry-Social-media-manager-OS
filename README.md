@@ -161,6 +161,20 @@ parsed and then validated; an invented pillar, an out-of-range score, an
 unknown language or a seventh claim type all fall back rather than getting
 through.
 
+## Obsidian (optional)
+
+Set `OBSIDIAN_VAULT_PATH` and the System page can project research,
+opportunities and published posts into a vault as Markdown, with frontmatter
+and wikilinks.
+
+It is one-way. There is no importer anywhere in the system, which is how the
+database stays the system of record — the vault cannot speak back. Notes are
+disposable: delete the folder, export again, nothing is lost. Anything written
+below the generated marker in a note survives every re-export, so the notes
+are also somewhere to think.
+
+Leaving it unset writes nothing and is a supported configuration.
+
 ## What still needs a human
 
 - **Brand voice** (`/settings/brand`). §4 makes this ChatGPT's and Jatin's

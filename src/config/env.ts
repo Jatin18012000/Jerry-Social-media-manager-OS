@@ -40,6 +40,15 @@ const schema = z.object({
   INSTAGRAM_APP_ID: z.string().optional(),
   INSTAGRAM_APP_SECRET: z.string().optional(),
 
+  /**
+   * Optional Obsidian vault to project notes into (automation guide §10).
+   *
+   * Absent is the normal state. The vault is a human-readable projection and
+   * never a system of record, so nothing depends on it being set — and a
+   * default would mean writing files into someone's home directory uninvited.
+   */
+  OBSIDIAN_VAULT_PATH: z.string().optional(),
+
   /** D4. OCR with a manual fallback. */
   ANALYTICS_MODE: z.enum(['OCR', 'MANUAL', 'API']).default('OCR'),
 });
