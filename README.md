@@ -148,9 +148,18 @@ the daemon is down, the model is mid-download or a request times out. Every
 attempt is recorded in `agent_runs` either way, so whether the model is
 actually being used is a question the data answers.
 
-The model is never trusted to produce the right shape. Its output is parsed
-and then validated; an invented pillar, an out-of-range score or an unknown
-language all fall back rather than getting through.
+The model also proposes claims. Every proposed claim is checked against the
+source text and dropped if it is not there: numbers must appear in the source
+exactly, and a reworded claim must match a single source sentence rather than
+the text as a whole. A claim is stored with its source's name and evidence
+tier and later shown to a writer as fact, so an invented one would arrive
+wearing a primary source's authority — §57 Risk 2. Drops are recorded as
+`UNGROUNDED` runs and visible on the System page.
+
+The model is never trusted to produce the right shape either. Its output is
+parsed and then validated; an invented pillar, an out-of-range score, an
+unknown language or a seventh claim type all fall back rather than getting
+through.
 
 ## What still needs a human
 

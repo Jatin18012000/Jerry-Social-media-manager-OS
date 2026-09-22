@@ -19,7 +19,7 @@ import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 
 import type { DB } from '@/db/client';
 import { claims, researchItems, sources, systemEvents } from '@/db/schema';
-import { extractClaimCandidates } from '@/domain/claim-extraction';
+
 import {
   type DuplicateCandidate,
   canonicalUrl,
@@ -29,6 +29,7 @@ import {
 import type { FetchedItem, SourceFetcher, StructuredProvider } from '@/ports';
 import { createInAppNotifier } from '@/adapters/notifiers/in-app-notifier';
 import { classifyResearchItem } from './classify';
+import { proposeClaims } from './extract-claims';
 
 export interface IngestReport {
   readonly sourceId: number;
@@ -223,9 +224,14 @@ export async function ingestSource(
           .filter((t): t is string => Boolean(t))
           .join('\n\n');
 
-        const candidates = extractClaimCandidates(text);
+        // The local model reads the text when it is running; the heuristics
+        // run otherwise. Either way every proposed claim has been checked
+        // against the source it is attributed to (§7.1).
+        const proposal = await proposeClaims(db, text, opts.classifier ?? null, {
+          now,
+        });
 
-        for (const candidate of candidates) {
+        for (const candidate of proposal.claims) {
           db.insert(claims)
             .values({
               researchItemId: inserted.id,
@@ -233,7 +239,10 @@ export async function ingestSource(
               claimType: candidate.claimType,
               // §7.1: ingestion cannot verify anything, so it never claims to.
               verificationStatus: 'UNVERIFIED',
-              note: `proposed by heuristic extractor (${candidate.signals.join(', ')})`,
+              note:
+                candidate.source === 'LOCAL_MODEL'
+                  ? `proposed by local model (${candidate.grounding?.toLowerCase()} match to source)`
+                  : `proposed by heuristic extractor (${candidate.signals.join(', ')})`,
             })
             .run();
           report.claimsProposed += 1;

@@ -192,3 +192,127 @@ export function extractClaimCandidates(
     .sort((a, b) => b.strength - a.strength)
     .slice(0, limit);
 }
+
+// ---------------------------------------------------------------------------
+// Groundedness — §7.1
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a proposed claim actually appears in the text it is attributed to.
+ *
+ * This is the safeguard that makes model-proposed claims acceptable at all.
+ *
+ * The heuristic extractor above cannot invent anything: it only ever returns
+ * sentences it was given. A model can, and a model asked to "extract claims"
+ * will cheerfully synthesise, paraphrase, or round a number. That matters more
+ * here than anywhere else in the system, because a claim is stored with its
+ * source's name and §7.2 evidence tier and then handed to a writer. An
+ * invented claim would arrive wearing a primary source's authority — which is
+ * §57's Risk 2 (research errors) in its purest form.
+ *
+ * So every proposed claim is checked against the source text, and anything
+ * that cannot be found there is dropped.
+ */
+
+/** Lowercase, collapse whitespace, and normalise the punctuation models alter. */
+export function normaliseForGrounding(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”‟]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/[^\p{L}\p{N}\s'"%$.-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function groundingTokens(text: string): string[] {
+  return normaliseForGrounding(text)
+    .split(' ')
+    .map((t) => t.replace(/^[.'-]+|[.'-]+$/g, ''))
+    .filter((t) => t.length > 2 || /\d/.test(t));
+}
+
+export type GroundingVerdict =
+  | { readonly grounded: true; readonly how: 'VERBATIM' | 'NEAR' }
+  | { readonly grounded: false; readonly reason: string };
+
+/** Below this share of matching tokens, a reworded claim is not accepted. */
+export const GROUNDING_TOKEN_THRESHOLD = 0.9;
+
+/**
+ * Checks a claim against its source text.
+ *
+ * Verbatim containment passes outright. A lightly reworded claim passes only
+ * if almost all of its content words appear in the source *and* every
+ * number-bearing token does — because a transformed number is the single most
+ * dangerous thing a model can return here. "15 trillion" where the source
+ * says "1.5 trillion" reads perfectly and is false.
+ */
+export function checkGrounding(
+  claim: string,
+  sourceText: string,
+  opts: { threshold?: number } = {},
+): GroundingVerdict {
+  const threshold = opts.threshold ?? GROUNDING_TOKEN_THRESHOLD;
+
+  const normalisedClaim = normaliseForGrounding(claim);
+  const normalisedSource = normaliseForGrounding(sourceText);
+
+  if (!normalisedClaim) {
+    return { grounded: false, reason: 'the claim is empty' };
+  }
+  if (!normalisedSource) {
+    return { grounded: false, reason: 'there is no source text to check against' };
+  }
+
+  if (normalisedSource.includes(normalisedClaim)) {
+    return { grounded: true, how: 'VERBATIM' };
+  }
+
+  const claimTokens = groundingTokens(claim);
+  if (claimTokens.length === 0) {
+    return { grounded: false, reason: 'the claim has no content words' };
+  }
+
+  // A number absent from the source anywhere was introduced or altered, and
+  // that is the single most dangerous thing a model can return here: "15
+  // trillion" where the source says 1.5 reads perfectly and is false.
+  const wholeSourceTokens = new Set(groundingTokens(sourceText));
+  const missingNumbers = claimTokens.filter(
+    (t) => /\d/.test(t) && !wholeSourceTokens.has(t),
+  );
+  if (missingNumbers.length > 0) {
+    return {
+      grounded: false,
+      reason: `not in the source: ${missingNumbers.join(', ')}`,
+    };
+  }
+
+  // A reworded claim must correspond to ONE source sentence, not to the text
+  // as a whole. Checking against the whole blob would accept two sentences
+  // welded together — every word present, 100% overlap, and a claim the
+  // source never made. Worse, welding a fact to a prediction and typing the
+  // result FACT is precisely the flattening §7.3 exists to prevent.
+  let best = 0;
+
+  for (const sentence of splitSentences(sourceText)) {
+    const sentenceTokens = new Set(groundingTokens(sentence));
+    if (sentenceTokens.size === 0) continue;
+
+    const matched = claimTokens.filter((t) => sentenceTokens.has(t)).length;
+    const share = matched / claimTokens.length;
+    if (share > best) best = share;
+  }
+
+  if (best >= threshold) {
+    return { grounded: true, how: 'NEAR' };
+  }
+
+  return {
+    grounded: false,
+    reason:
+      `no single sentence in the source contains it — the closest matches ` +
+      `${Math.round(best * 100)}% of the wording`,
+  };
+}
