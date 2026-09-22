@@ -33,6 +33,13 @@ console.log(
     `source(s) — §10 and §14 configuration, not demo data.`,
 );
 
+if (report.sequencesReset > 0) {
+  console.log(
+    `Reset ${report.sequencesReset} autoincrement counter(s), so ids start ` +
+      `from 1 again on the emptied tables.`,
+  );
+}
+
 if (report.brandConfigDeleted) {
   console.log(
     '\nRemoved the brand configuration. Briefs will carry the "brand voice ' +

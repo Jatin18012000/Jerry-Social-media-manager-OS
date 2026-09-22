@@ -25,11 +25,20 @@
  *
  * Everything else is operational state and goes.
  *
+ * It then resets the AUTOINCREMENT counters, so a database cleaned and
+ * re-seeded looks like a fresh one rather than one carrying ids in the
+ * hundreds. Each counter is set to the largest id that actually survived, or
+ * dropped entirely when the table is empty — never to zero on a table that
+ * still holds rows. SQLite computes the next id as
+ * `max(largest existing rowid, sequence) + 1`, so a counter below the real
+ * maximum cannot collide; setting it to the survivor maximum is correct
+ * rather than merely safe, and the tables that keep rows are left accurate.
+ *
  * Never run against a production database — there is no production database,
  * and by D2 there is not going to be one, but the warning stands.
  */
 
-import { notInArray } from 'drizzle-orm';
+import { type SQLWrapper, notInArray, sql } from 'drizzle-orm';
 
 import { createDb } from './client';
 import {
@@ -64,6 +73,8 @@ export interface CleanReport {
   readonly total: number;
   readonly sourcesKept: number;
   readonly pillarsKept: number;
+  /** AUTOINCREMENT counters rewound, so ids start from 1 again. */
+  readonly sequencesReset: number;
   /**
    * Set when a brand configuration was found that is not the placeholder and
    * was left alone. §4 says where a real one comes from, and it is not here.
@@ -77,12 +88,76 @@ export interface CleanOptions {
   readonly brand?: boolean;
 }
 
+/**
+ * Rewinds each AUTOINCREMENT counter to the largest id that survived.
+ *
+ * Driven by `sqlite_sequence` itself rather than a hardcoded table list,
+ * which would silently go stale the next time a table is added.
+ *
+ * An empty table has its counter row removed, so the next insert is id 1. A
+ * table that kept rows has its counter set to the real maximum — accurate,
+ * and it leaves SQLite's own guard (next id is
+ * `max(largest existing rowid, sequence) + 1`) with nothing to correct.
+ */
+interface RawRunner {
+  all<T = unknown>(query: SQLWrapper): T[];
+  get<T = unknown>(query: SQLWrapper): T | undefined;
+  run(query: SQLWrapper): unknown;
+}
+
+function resetSequences(tx: RawRunner): number {
+  const tracked = tx.all<{ name: string }>(
+    sql`select name from sqlite_sequence`,
+  );
+
+  // Only real tables in this schema. sqlite_sequence is keyed by name, and a
+  // name that is not a table we own is not ours to rewind.
+  const owned = new Set(
+    tx
+      .all<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table'
+            and name not like 'sqlite_%'
+            and name not like '__drizzle%'`,
+      )
+      .map((row) => row.name),
+  );
+
+  let changed = 0;
+
+  for (const { name } of tracked) {
+    if (!owned.has(name)) continue;
+
+    const max =
+      tx.get<{ m: number | null }>(
+        sql`select max(rowid) as m from ${sql.identifier(name)}`,
+      )?.m ?? null;
+
+    if (max === null) {
+      tx.run(sql`delete from sqlite_sequence where name = ${name}`);
+      changed += 1;
+      continue;
+    }
+
+    const current = tx.get<{ seq: number }>(
+      sql`select seq from sqlite_sequence where name = ${name}`,
+    );
+
+    if (current && current.seq !== max) {
+      tx.run(sql`update sqlite_sequence set seq = ${max} where name = ${name}`);
+      changed += 1;
+    }
+  }
+
+  return changed;
+}
+
 export function clean(
   databaseUrl = process.env['DATABASE_URL'] ?? './data/os.db',
   opts: CleanOptions = {},
 ): CleanReport {
   const db = createDb(databaseUrl);
   const deleted: Record<string, number> = {};
+  let sequencesReset = 0;
 
   const record = (table: string, rows: { changes: number }) => {
     if (rows.changes > 0) deleted[table] = rows.changes;
@@ -122,6 +197,8 @@ export function clean(
       'sources',
       tx.delete(sources).where(notInArray(sources.url, [...SEED_SOURCE_URLS])).run(),
     );
+
+    sequencesReset = resetSequences(tx);
   });
 
   const kept = db.select({ url: sources.url }).from(sources).all();
@@ -167,6 +244,7 @@ export function clean(
     total,
     sourcesKept: kept.length,
     pillarsKept,
+    sequencesReset,
     brandConfigKept,
     brandConfigDeleted,
   };

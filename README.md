@@ -215,6 +215,20 @@ repository cannot regenerate. If one is set that is not the placeholder, the
 command says so — a brand voice nobody wrote silently suppresses the warning
 that output is generic. `npm run db:clean -- --brand` removes it.
 
+It also rewinds the `AUTOINCREMENT` counters, so a cleaned database hands out
+ids from 1 again rather than from the hundreds. Each counter is set to the
+largest id that actually survived — dropped entirely for an emptied table,
+left accurate for one that kept rows. SQLite takes the next id as
+`max(largest existing rowid, sequence) + 1`, so this cannot collide with a
+surviving row, and a test inserts for real to prove it.
+
+One consequence worth knowing: ids are reused after a clean, and Obsidian
+notes are named `{id}-{slug}.md`. Notes exported before a clean stay in the
+vault as orphans pointing at deleted rows. A new item only overwrites one if
+its id *and* its title slug both match, in which case your own notes below the
+generated markers are still preserved — but the tidy move is to delete the
+`Social Media OS/` folder and re-export.
+
 ## What still needs a human
 
 - **Brand voice** (`/settings/brand`). §4 makes this ChatGPT's and Jatin's

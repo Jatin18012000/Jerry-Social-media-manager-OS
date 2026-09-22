@@ -220,6 +220,136 @@ describe('clean — what it keeps', () => {
   });
 });
 
+describe('clean — autoincrement sequences', () => {
+  /** What SQLite will hand out next for a table, without inserting. */
+  function nextId(table: string): number {
+    const seq = sqlite
+      .prepare('select seq from sqlite_sequence where name = ?')
+      .get(table) as { seq: number } | undefined;
+    const max = sqlite
+      .prepare(`select max(rowid) as m from "${table}"`)
+      .get() as { m: number | null };
+    return Math.max(seq?.seq ?? 0, max.m ?? 0) + 1;
+  }
+
+  it('restarts ids at 1 for a table it emptied', () => {
+    demoRow();
+    demoRow();
+    demoRow();
+    expect(nextId('research_items')).toBe(4);
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    expect(nextId('research_items')).toBe(1);
+  });
+
+  it('drops the counter row entirely for an emptied table', () => {
+    demoRow();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    expect(
+      sqlite
+        .prepare("select seq from sqlite_sequence where name = 'research_items'")
+        .get(),
+    ).toBeUndefined();
+  });
+
+  it('rewinds a partially emptied table to its real maximum', () => {
+    // sources keeps the seeded §14 rows and loses the invented ones, so its
+    // counter should land on the last survivor rather than on 0 or on 21.
+    const seeded = db.select().from(sources).all().length;
+    demoRow();
+    demoRow();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    const seq = sqlite
+      .prepare("select seq from sqlite_sequence where name = 'sources'")
+      .get() as { seq: number };
+    expect(seq.seq).toBe(seeded);
+    expect(nextId('sources')).toBe(seeded + 1);
+  });
+
+  it('never hands out an id that collides with a surviving row', () => {
+    // The failure this guards against: a counter rewound below rows that are
+    // still there, then reused. Inserting for real is the only honest check.
+    demoRow();
+    demoRow();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    const existing = new Set(
+      db.select({ id: sources.id }).from(sources).all().map((r) => r.id),
+    );
+    const inserted = db
+      .insert(sources)
+      .values({
+        name: 'A new source',
+        type: 'OFFICIAL_BLOG',
+        fetcher: 'RSS',
+        url: 'https://example.com/brand-new',
+        credibilityTier: 'PRIMARY',
+      })
+      .returning({ id: sources.id })
+      .get().id;
+
+    expect(existing.has(inserted)).toBe(false);
+  });
+
+  it('leaves an already-correct counter alone', () => {
+    // content_pillars is untouched by the clean, so nothing should change.
+    const before = sqlite
+      .prepare("select seq from sqlite_sequence where name = 'content_pillars'")
+      .get() as { seq: number };
+    demoRow();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    const after = sqlite
+      .prepare("select seq from sqlite_sequence where name = 'content_pillars'")
+      .get() as { seq: number };
+    expect(after.seq).toBe(before.seq);
+  });
+
+  it('reports how many counters it reset', () => {
+    demoRow();
+    sqlite.close();
+
+    const report = clean(url);
+    db = open();
+
+    expect(report.sequencesReset).toBeGreaterThan(0);
+  });
+
+  it('does not touch the migrations table', () => {
+    // Rewinding drizzle's own bookkeeping would be a different kind of bug.
+    const before = sqlite
+      .prepare("select count(*) c from sqlite_master where name like '__drizzle%'")
+      .get() as { c: number };
+    demoRow();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    const after = sqlite
+      .prepare("select count(*) c from sqlite_master where name like '__drizzle%'")
+      .get() as { c: number };
+    expect(after.c).toBe(before.c);
+  });
+});
+
 describe('clean — the brand configuration', () => {
   function setBrand(isPlaceholder: boolean, name = 'Some Brand') {
     db.insert(brandConfig)
