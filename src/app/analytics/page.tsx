@@ -79,6 +79,32 @@ export default async function AnalyticsPage() {
               <span className="muted small">
                 (n={finding.sampleSize}, confidence {finding.confidence})
               </span>
+              {/*
+                A HYPOTHESIS is where observational analysis stops (§29). This
+                link is the only way past it: it carries the wording into a
+                pre-registration, which is what §30 requires before the
+                finding could ever read as a cause.
+              */}
+              {finding.status === 'HYPOTHESIS' && (
+                <>
+                  {' '}
+                  <a
+                    href={`/experiments?hypothesis=${encodeURIComponent(
+                      finding.summary,
+                    )}`}
+                  >
+                    Test this deliberately →
+                  </a>
+                </>
+              )}
+              {finding.status === 'SUPPORTED' && finding.experimentId !== null && (
+                <>
+                  {' '}
+                  <a href={`/experiments/${finding.experimentId}`}>
+                    See the experiment →
+                  </a>
+                </>
+              )}
             </span>
           </div>
         ))}

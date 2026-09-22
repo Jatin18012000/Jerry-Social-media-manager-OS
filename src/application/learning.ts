@@ -11,7 +11,7 @@
  * brief reads through `presentableFindings`.
  */
 
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import type { DB } from '@/db/client';
 import {
@@ -148,6 +148,12 @@ export interface RecomputeReport {
  * it stands now, and keeping yesterday's alongside today's would leave the
  * dashboard showing two contradictory claims with no way to tell which is
  * current.
+ *
+ * Experiment-derived findings are exempt from the replacement. A SUPPORTED
+ * finding is the product of a pre-registered experiment (§30), not of this
+ * recomputation, and it is the one status that cost something to obtain —
+ * deleting it because new analytics arrived would throw away the only causal
+ * knowledge the system has.
  */
 export function recomputeFindings(
   db: DB,
@@ -160,7 +166,12 @@ export function recomputeFindings(
 
   db.transaction((tx) => {
     tx.delete(learningFindings)
-      .where(eq(learningFindings.metric, metric))
+      .where(
+        and(
+          eq(learningFindings.metric, metric),
+          isNull(learningFindings.experimentId),
+        ),
+      )
       .run();
 
     for (const finding of findings) {

@@ -93,6 +93,7 @@ more than one level:
 | §16 unverified claims block progress | guard on entering `STRATEGY_READY` | — |
 | §39 one job per item/platform/slot | idempotency key + atomic job claim | `UNIQUE(idempotency_key)` |
 | §29 no conclusions from small samples | tiered findings; `SUPPORTED` needs an experiment | — |
+| §30 no conclusion before the registered n | refused per arm, in the use case | — |
 
 The domain guards can be bypassed by a bug. The database constraints cannot.
 
@@ -108,9 +109,10 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | **M3** | QA gate, approval queue, scheduler, manual publish, publication records | ✅ done |
 | **M4** | OCR analytics capture, north-star metric | ✅ done |
 | **M5** | Learning engine, findings, dashboard | ✅ done |
-| M6+ | `LinkedInPublisher`, then `InstagramPublisher` | blocked on platform access |
+| **M6** | Pre-registered experiments (§30) — the only route to SUPPORTED | ✅ done |
+| M7+ | `LinkedInPublisher`, then `InstagramPublisher` | blocked on platform access |
 
-M1–M5 have no external dependencies and do not wait on platform API access.
+M1–M6 have no external dependencies and do not wait on platform API access.
 
 ---
 
@@ -160,6 +162,29 @@ The model is never trusted to produce the right shape either. Its output is
 parsed and then validated; an invented pillar, an out-of-range score, an
 unknown language or a seventh claim type all fall back rather than getting
 through.
+
+## Experiments
+
+`/experiments` is the only route to a `SUPPORTED` finding. Observational
+analysis stops at `HYPOTHESIS` (§29) — a pattern across posts you happened to
+publish is not a cause. §30 opens that door by fixing the hypothesis, the
+metric, the two arms and the minimum sample size *before* the posts go out.
+
+Once an experiment starts there is no edit path, and it cannot be concluded
+until **both** arms reach the registered minimum. Stopping when the numbers
+look right manufactures significance out of noise, so that is a refusal in the
+use case, not a warning in the UI. An item that has already been measured
+cannot be enrolled at all: its result is known, so choosing it would mean
+choosing a data point by its outcome.
+
+A null result is a result. `REFUTED` and `INCONCLUSIVE` are recorded and shown
+— "the effect went the other way" and "we could not tell" are kept distinct,
+and neither is treated as a failed run. Only `SUPPORTED` earns a finding, and
+it links back to the terms that produced it.
+
+A `HYPOTHESIS` finding on the Analytics page links straight into a
+pre-registration carrying its wording. That path — notice, test, know — is
+what §67 asks for.
 
 ## Obsidian (optional)
 

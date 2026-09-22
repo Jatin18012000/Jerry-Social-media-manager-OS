@@ -25,6 +25,7 @@ export async function Nav() {
       <a href="/review">Review</a>
       <a href="/schedule">Schedule</a>
       <a href="/analytics">Analytics</a>
+      <a href="/experiments">Experiments</a>
       <a href="/notifications">
         Inbox
         {unread > 0 && <span className="nav-count">{unread}</span>}

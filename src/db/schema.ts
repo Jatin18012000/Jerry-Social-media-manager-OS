@@ -565,6 +565,9 @@ export const analyticsSnapshots = sqliteTable(
   ],
 );
 
+/** §30. A null result is a result, so all three are recorded. */
+export type Verdict = 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
+
 export type ExperimentStatus =
   | 'DRAFT'
   | 'RUNNING'
@@ -586,6 +589,12 @@ export const experiments = sqliteTable(
     startAt: integer('start_at'),
     endAt: integer('end_at'),
     status: text('status').$type<ExperimentStatus>().notNull().default('DRAFT'),
+    /**
+     * §30. Queryable so a REFUTED or INCONCLUSIVE experiment is as findable
+     * as a successful one. An OS that can only surface its own confirmations
+     * is a machine for confirming them.
+     */
+    verdict: text('verdict').$type<Verdict>(),
     result: text('result'),
     confidence: text('confidence'),
     ...timestamps,
@@ -635,11 +644,21 @@ export const learningFindings = sqliteTable(
     status: text('status').$type<FindingStatus>().notNull(),
     summary: text('summary').notNull(),
     computedAt: integer('computed_at').notNull().default(now),
+    /**
+     * Set when this finding was earned by a concluded experiment (§30).
+     *
+     * Load-bearing, not decorative. Recomputing observational findings
+     * replaces the whole set for a metric, and without this column that
+     * delete would silently destroy every SUPPORTED result the moment new
+     * analytics arrived — the one status that costs an experiment to obtain.
+     */
+    experimentId: integer('experiment_id').references(() => experiments.id),
     ...timestamps,
   },
   (t) => [
     index('learning_findings_dimension_idx').on(t.dimension, t.segment),
     index('learning_findings_status_idx').on(t.status),
+    index('learning_findings_experiment_idx').on(t.experimentId),
   ],
 );
 
