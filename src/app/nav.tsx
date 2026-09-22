@@ -29,6 +29,7 @@ export async function Nav() {
         Inbox
         {unread > 0 && <span className="nav-count">{unread}</span>}
       </a>
+      <a href="/system">System</a>
       <a href="/settings/brand">Brand</a>
       <SignOutLink />
     </nav>
