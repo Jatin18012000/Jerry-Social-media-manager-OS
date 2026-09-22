@@ -15,6 +15,13 @@
       "when": 1790036736536,
       "tag": "0001_sharp_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790049544944,
+      "tag": "0002_gigantic_red_skull",
+      "breakpoints": true
     }
   ]
 }

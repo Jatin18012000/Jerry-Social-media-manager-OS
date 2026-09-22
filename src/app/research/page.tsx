@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from 'drizzle-orm';
 
-import { claims, researchItems, sources } from '@/db/schema';
+import { claims, contentPillars, researchItems, sources } from '@/db/schema';
 import { getDb } from '@/db/runtime';
 import { ManualUrlForm, PollButton, PromoteForm } from './controls';
 
@@ -46,9 +46,13 @@ export default async function ResearchPage() {
       status: researchItems.status,
       sourceName: sources.name,
       credibilityTier: sources.credibilityTier,
+      // Left join: an item the classifier could not place still belongs in
+      // the queue, shown as unclassified rather than given a pillar (§7.1).
+      pillarName: contentPillars.name,
     })
     .from(researchItems)
     .innerJoin(sources, eq(researchItems.sourceId, sources.id))
+    .leftJoin(contentPillars, eq(contentPillars.id, researchItems.pillarId))
     .where(inArray(researchItems.status, ['NEW', 'TRIAGED']))
     .orderBy(
       desc(researchItems.relevanceScore),
@@ -145,7 +149,18 @@ export default async function ResearchPage() {
               <p className="muted small">
                 {item.sourceName} · {hostOf(item.url)} ·{' '}
                 {timeAgo(item.discoveredAt)} ·{' '}
-                <span className="tag">{item.credibilityTier}</span>
+                <span className="tag">{item.credibilityTier}</span> ·{' '}
+                {/*
+                  A pillar the classifier could not determine is shown as
+                  unclassified. Naming a likely one would be inventing it
+                  (§7.1), and a triage queue is exactly where that would
+                  harden into a fact.
+                */}
+                {item.pillarName ? (
+                  <span className="tag">{item.pillarName}</span>
+                ) : (
+                  <span className="tag tag-ASSUMPTION">unclassified</span>
+                )}
               </p>
 
               {item.summary && <p className="summary">{item.summary}</p>}

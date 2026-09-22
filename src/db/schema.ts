@@ -172,6 +172,20 @@ export const researchItems = sqliteTable(
     relevanceScore: real('relevance_score'),
     importance: integer('importance'),
 
+    /**
+     * The pillar the §15 classifier assigned, or NULL when it could not
+     * determine one. NULL is a real answer: neither path invents a pillar,
+     * and a default here would be a guess the UI would then present as a
+     * fact (§7.1).
+     */
+    pillarId: integer('pillar_id').references(() => contentPillars.id),
+    /**
+     * The language of the item itself, as classified. The heuristic path
+     * cannot tell Hinglish from English and says so by leaving this NULL —
+     * "not determined" is not "EN".
+     */
+    language: text('language').$type<Language>(),
+
     verificationStatus: text('verification_status')
       .$type<VerificationStatus>()
       .notNull()
@@ -188,6 +202,7 @@ export const researchItems = sqliteTable(
     index('research_items_dedupe_idx').on(t.dedupeKey),
     index('research_items_status_idx').on(t.status),
     index('research_items_discovered_idx').on(t.discoveredAt),
+    index('research_items_pillar_idx').on(t.pillarId),
   ],
 );
 

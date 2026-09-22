@@ -12,7 +12,13 @@ import { createVaultWriter } from '@/adapters/obsidian/vault-writer';
 import { createPublisherRegistry } from '@/adapters/publishers';
 import type { DB } from '@/db/client';
 import * as schema from '@/db/schema';
-import { claims, contentItems, researchItems, sources } from '@/db/schema';
+import {
+  claims,
+  contentItems,
+  contentPillars,
+  researchItems,
+  sources,
+} from '@/db/schema';
 import type { Platform } from '@/domain/content';
 import { saveReading } from './analytics';
 import { act, moveTo, verifyClaim } from './content';
@@ -35,7 +41,7 @@ const SLOT = new Date('2026-09-21T13:00:00Z');
 const registry = createPublisherRegistry('MANUAL');
 const publisherFor = (p: Platform) => registry.for(p);
 
-function researchItem(title: string): number {
+function researchItem(title: string, pillarId?: number): number {
   const sourceId = db
     .insert(sources)
     .values({
@@ -57,6 +63,7 @@ function researchItem(title: string): number {
       url: `https://example.com/i-${Math.random()}`,
       dedupeKey: `k-${Math.random()}`,
       relevanceScore: 0.8,
+      pillarId: pillarId ?? null,
     })
     .returning({ id: researchItems.id })
     .get().id;
@@ -205,6 +212,38 @@ describe('exportToVault', () => {
     // The colon would break naive frontmatter and hide the whole block.
     expect(md).toContain('title: "OpenAI: a new model"');
     expect(md).toContain('source_tier: "PRIMARY"');
+  });
+
+  it('carries the classified pillar in the frontmatter', async () => {
+    const pillarId = db
+      .insert(contentPillars)
+      .values({ slug: 'ai-news', name: 'AI News' })
+      .returning({ id: contentPillars.id })
+      .get().id;
+    const id = researchItem('A classified thing', pillarId);
+
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    const md = await readFile(
+      join(vault, `Social Media OS/Research/${id}-a-classified-thing.md`),
+      'utf8',
+    );
+    expect(md).toContain('pillar: "AI News"');
+  });
+
+  it('writes pillar: null for an item the classifier could not place', async () => {
+    // §7.1: an unclassified item is exported as unclassified. A knowledge
+    // layer that filled in a likely pillar would make one up.
+    const id = researchItem('An unplaced thing');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    const md = await readFile(
+      join(vault, `Social Media OS/Research/${id}-an-unplaced-thing.md`),
+      'utf8',
+    );
+    expect(md).toContain('pillar: null');
   });
 
   it('updates rather than duplicates on a second run', async () => {

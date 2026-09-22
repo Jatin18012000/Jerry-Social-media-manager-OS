@@ -164,6 +164,27 @@ describe('classifyWithHeuristics', () => {
     });
     expect(result.relevance).toBe(0);
   });
+
+  it('names no pillar at all when nothing matched', () => {
+    // §7.1: the pillar a heuristic could not determine is null. Not the
+    // first pillar, not the most common one, not a plausible one.
+    const result = classifyWithHeuristics(db, {
+      title: 'Local bakery wins award',
+      summary: 'Cakes.',
+    });
+    expect(result.pillarId).toBeNull();
+    expect(result.pillarSlug).toBeNull();
+  });
+
+  it('resolves a matched pillar to a real id ingest can store', () => {
+    const result = classifyWithHeuristics(db, {
+      title: 'A new benchmark paper on arxiv',
+    });
+    const pillars = db.select().from(contentPillars).all();
+    expect(result.pillarId).toBe(
+      pillars.find((p) => p.slug === 'ai-research')?.id,
+    );
+  });
 });
 
 describe('classifyResearchItem — the local model when present', () => {
@@ -196,6 +217,21 @@ describe('classifyResearchItem — the local model when present', () => {
     expect(result.pillarId).toBe(
       pillar.find((p) => p.slug === 'ai-research')?.id,
     );
+  });
+
+  it('leaves the pillar null when the model says none fit', async () => {
+    // "None of these" is a valid answer and is stored as such. A model that
+    // declines to place an item must not be second-guessed into one (§7.1).
+    const result = await classifyResearchItem(
+      db,
+      { title: 'Local bakery wins award', summary: 'Cakes.' },
+      stubProvider({ relevance: 0.05, reason: 'unrelated to AI' }),
+    );
+
+    expect(result.source).toBe('LOCAL_MODEL');
+    expect(result.pillarId).toBeNull();
+    expect(result.pillarSlug).toBeNull();
+    expect(result.relevance).toBe(0.05);
   });
 
   it('records the run for cost and usage tracking (§43, §44)', async () => {

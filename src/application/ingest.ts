@@ -197,6 +197,10 @@ export async function ingestSource(
           // A soft duplicate is stored and linked, never dropped (§7.4).
           duplicateOfId: verdict.isDuplicate ? (verdict.of ?? null) : null,
           relevanceScore: classification.relevance,
+          // NULL when the classifier could not place the item. A default
+          // pillar here would be a guess rendered later as a fact (§7.1).
+          pillarId: classification.pillarId,
+          language: classification.language,
           status: verdict.isDuplicate ? 'DUPLICATE' : 'NEW',
           verificationStatus: 'UNVERIFIED',
         })

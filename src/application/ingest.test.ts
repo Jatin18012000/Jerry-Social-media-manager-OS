@@ -14,7 +14,7 @@ import {
   sources,
   systemEvents,
 } from '@/db/schema';
-import type { FetchedItem, SourceFetcher } from '@/ports';
+import type { FetchedItem, SourceFetcher, StructuredProvider } from '@/ports';
 import {
   dueSources,
   ingestDueSources,
@@ -76,6 +76,32 @@ function seedPillars(): void {
     .run();
 }
 
+/**
+ * A local model that answers the classification task and nothing else.
+ *
+ * Claim extraction shares the provider, so anything other than
+ * `classify-research` is left to fall back to its own heuristics — which is
+ * what a real model returning an unusable answer would do anyway.
+ */
+function stubClassifier(output: unknown): StructuredProvider {
+  return {
+    name: 'stub',
+    model: 'stub-model',
+    available: async () => true,
+    run: async (task) => {
+      const parsed =
+        task.task === 'classify-research' ? task.parse(output) : null;
+      return {
+        output: parsed,
+        provider: 'stub',
+        model: 'stub-model',
+        durationMs: 3,
+        status: parsed === null ? 'INVALID_OUTPUT' : 'OK',
+      };
+    },
+  };
+}
+
 beforeEach(() => {
   sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
@@ -109,6 +135,82 @@ describe('ingestSource', () => {
     expect(row?.sourceId).toBe(sourceId);
     expect(row?.relevanceScore).toBeGreaterThan(0);
     expect(row?.status).toBe('NEW');
+  });
+
+  it('stores the pillar the heuristics classified it into', async () => {
+    // The classifier's verdict is the point of running it. A run that
+    // changed nothing would make the agent_runs record misleading (§43).
+    const sourceId = seedSource();
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([
+        {
+          title: 'OpenAI released a new model',
+          url: 'https://example.com/pillar-heuristic',
+          summary: 'The launch is available today.',
+        },
+      ]),
+    );
+
+    const news = db
+      .select()
+      .from(contentPillars)
+      .where(eq(contentPillars.slug, 'ai-news'))
+      .get();
+    const row = db.select().from(researchItems).all()[0];
+    expect(row?.pillarId).toBe(news?.id);
+  });
+
+  it('stores the pillar the local model classified it into', async () => {
+    const sourceId = seedSource();
+    await ingestSource(
+      db,
+      sourceId,
+      () =>
+        stubFetcher([
+          {
+            title: 'A story the keywords would miss',
+            url: 'https://example.com/pillar-model',
+          },
+        ]),
+      {
+        classifier: stubClassifier({
+          pillar: 'ai-research',
+          relevance: 0.77,
+          language: 'HINGLISH',
+          reason: 'a paper',
+        }),
+      },
+    );
+
+    const research = db
+      .select()
+      .from(contentPillars)
+      .where(eq(contentPillars.slug, 'ai-research'))
+      .get();
+    const row = db.select().from(researchItems).all()[0];
+    expect(row?.pillarId).toBe(research?.id);
+    expect(row?.relevanceScore).toBe(0.77);
+    expect(row?.language).toBe('HINGLISH');
+  });
+
+  it('stores NULL rather than a guess when no pillar was determined', async () => {
+    // §7.1: "could not place this" is a fact, and a default pillar here
+    // would be an invention the UI would then show as one.
+    const sourceId = seedSource();
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([
+        {
+          title: 'Local bakery wins award',
+          url: 'https://example.com/no-pillar',
+          summary: 'Cakes.',
+        },
+      ]),
+    );
+
+    const row = db.select().from(researchItems).all()[0];
+    expect(row?.pillarId).toBeNull();
+    // The heuristics cannot tell Hinglish from English either, and say so.
+    expect(row?.language).toBeNull();
   });
 
   it('canonicalises the stored URL', async () => {

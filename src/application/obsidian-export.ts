@@ -73,9 +73,13 @@ function researchNotes(db: DB, limit: number): ResearchNote[] {
       status: researchItems.status,
       sourceName: sources.name,
       credibilityTier: sources.credibilityTier,
+      // Left join: an item the classifier could not place has no pillar, and
+      // that must not drop it from the export (§7.1 — NULL is the answer).
+      pillarName: contentPillars.name,
     })
     .from(researchItems)
     .innerJoin(sources, eq(sources.id, researchItems.sourceId))
+    .leftJoin(contentPillars, eq(contentPillars.id, researchItems.pillarId))
     .orderBy(desc(researchItems.discoveredAt))
     .limit(limit)
     .all();
@@ -105,10 +109,6 @@ function researchNotes(db: DB, limit: number): ResearchNote[] {
 
   return rows.map((row) => ({
     ...row,
-    // Classification assigns a pillar but ingest does not persist it on the
-    // research item, so there is nothing to render. Naming a plausible one
-    // here would be inventing it (§7.1).
-    pillarName: null,
     claims: byItem.get(row.id) ?? [],
   }));
 }
