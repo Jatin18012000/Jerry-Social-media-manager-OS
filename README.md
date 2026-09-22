@@ -201,6 +201,18 @@ are also somewhere to think.
 
 Leaving it unset writes nothing and is a supported configuration.
 
+**Orphan notes.** Because the export never deletes, a note whose row has since
+been removed stays in the vault pointing at nothing. The System page lists
+those notes, by path, and the export reports a count. It deletes none of them:
+a projection that reached back into your vault could destroy a note you had
+moved or rewritten, so that decision stays yours. Files you added yourself, and
+notes of ours you renamed, are not counted — only names matching `{id}-{slug}.md`
+are treated as ours.
+
+Orphans are judged against the whole database, not against the last export.
+The export is capped, so comparing against one batch would call every note
+beyond the cap an orphan and invite deleting notes whose rows are intact.
+
 ### Clearing demo data
 
 `npm run db:demo` leaves research, opportunities, content, publications and
@@ -224,10 +236,9 @@ surviving row, and a test inserts for real to prove it.
 
 One consequence worth knowing: ids are reused after a clean, and Obsidian
 notes are named `{id}-{slug}.md`. Notes exported before a clean stay in the
-vault as orphans pointing at deleted rows. A new item only overwrites one if
-its id *and* its title slug both match, in which case your own notes below the
-generated markers are still preserved — but the tidy move is to delete the
-`Social Media OS/` folder and re-export.
+vault as orphans pointing at deleted rows. The System page lists them (see
+below), and the tidy move is to delete the `Social Media OS/` folder and
+re-export.
 
 ## What still needs a human
 

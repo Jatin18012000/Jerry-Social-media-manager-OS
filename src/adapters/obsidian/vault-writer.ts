@@ -23,7 +23,7 @@
  * is how that is enforced rather than promised.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 import { mergeGenerated } from '@/domain/obsidian';
@@ -39,6 +39,16 @@ export interface VaultWriter {
   readonly root: string;
   /** Writes a note, preserving anything the user added outside the markers. */
   write(relativePath: string, generatedBody: string): Promise<'CREATED' | 'UPDATED'>;
+  /**
+   * Filenames directly inside one vault folder. Empty when it does not exist.
+   *
+   * This reads the vault, which is worth being precise about: §10 forbids
+   * Obsidian becoming a system of record, and the guard against that is the
+   * absence of an importer. Reading *names* in order to report on them moves
+   * nothing into the database and decides nothing — no note content is read,
+   * and nothing here writes to the database. That is reporting, not import.
+   */
+  list(relativeFolder: string): Promise<string[]>;
 }
 
 /**
@@ -104,6 +114,23 @@ export function createVaultWriter(root: string): VaultWriter {
 
       await writeFile(target, mergeGenerated(existing, generatedBody), 'utf8');
       return 'UPDATED';
+    },
+
+    async list(relativeFolder) {
+      const target = resolveInside(root, relativeFolder);
+
+      try {
+        const entries = await readdir(target, { withFileTypes: true });
+        return entries.filter((e) => e.isFile()).map((e) => e.name);
+      } catch (error) {
+        // A folder that was never exported to is not an error; it is the
+        // normal state before the first export.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') return [];
+        throw new VaultError(
+          `Could not read ${relativeFolder}: ${(error as Error).message}`,
+        );
+      }
     },
   };
 }

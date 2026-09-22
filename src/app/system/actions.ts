@@ -36,9 +36,15 @@ export async function exportObsidian(): Promise<ActionResult> {
 
     revalidatePath('/system');
 
+    const orphans =
+      report.orphans.length === 0
+        ? ''
+        : ` ${report.orphans.length} note(s) in the vault no longer have a ` +
+          `row behind them — listed below. Nothing was deleted.`;
+
     const total = report.created + report.updated;
     if (total === 0 && report.failed.length === 0) {
-      return { ok: true, message: 'Nothing to export yet.' };
+      return { ok: true, message: `Nothing to export yet.${orphans}` };
     }
 
     const counts =
@@ -59,7 +65,7 @@ export async function exportObsidian(): Promise<ActionResult> {
       };
     }
 
-    return { ok: true, message: `${counts} in ${report.vaultRoot}.` };
+    return { ok: true, message: `${counts} in ${report.vaultRoot}.${orphans}` };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, message: `Export failed: ${message}` };

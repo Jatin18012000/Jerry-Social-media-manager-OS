@@ -51,7 +51,25 @@ export interface ExportReport {
   readonly updated: number;
   readonly failed: readonly { path: string; reason: string }[];
   readonly byFolder: Readonly<Record<keyof typeof FOLDERS, number>>;
+  /** Notes whose row is gone. Reported, never deleted. */
+  readonly orphans: readonly Orphan[];
 }
+
+/** A note left behind by a row that no longer exists. */
+export interface Orphan {
+  readonly path: string;
+  readonly folder: keyof typeof FOLDERS;
+  readonly id: number;
+}
+
+/**
+ * Filenames this exporter produces look like `42-a-title.md`.
+ *
+ * Anything else in the folder was put there by a person — their own note, or
+ * one of ours they renamed. Either way it is not ours to reason about, and
+ * certainly not ours to call an orphan.
+ */
+const MANAGED_NAME = /^(\d+)-.*\.md$/;
 
 /** How many of each kind to project. The vault is a working set, not a mirror. */
 export const DEFAULT_LIMIT = 200;
@@ -325,6 +343,77 @@ export function planExport(db: DB, limit = DEFAULT_LIMIT): PlannedNote[] {
  * and reported, because a partial export that claimed success would be the
  * kind of quiet half-truth §40 exists to prevent.
  */
+/**
+ * The ids each managed folder's notes are derived from, with no limit applied.
+ *
+ * Judged against the whole database rather than against what an export just
+ * wrote — that distinction is the entire correctness of this feature. The
+ * export is capped at `DEFAULT_LIMIT`, so comparing notes to the last batch
+ * would declare every note beyond the cap an orphan and invite someone to
+ * delete notes whose rows are perfectly intact.
+ */
+function liveIds(db: DB): Record<keyof typeof FOLDERS, Set<number>> {
+  return {
+    research: new Set(
+      db.select({ id: researchItems.id }).from(researchItems).all().map((r) => r.id),
+    ),
+    opportunities: new Set(
+      db
+        .select({ id: contentOpportunities.id })
+        .from(contentOpportunities)
+        .all()
+        .map((r) => r.id),
+    ),
+    // A published note exists because the item had a publication record. If
+    // either is gone the note would no longer be produced, so it is stale in
+    // exactly the same way.
+    published: new Set(
+      db
+        .select({ id: contentItems.id })
+        .from(contentItems)
+        .innerJoin(
+          publicationRecords,
+          eq(publicationRecords.contentItemId, contentItems.id),
+        )
+        .all()
+        .map((r) => r.id),
+    ),
+  };
+}
+
+/**
+ * Notes in the managed folders whose backing row no longer exists.
+ *
+ * Deletes nothing, and deliberately so. The exporter is one-way by
+ * construction (§10) and a projection that reached back into the vault to
+ * remove files could destroy a note someone had moved, renamed or rewritten.
+ * Reporting gives the visibility without taking the decision.
+ */
+export async function findOrphans(
+  db: DB,
+  writer: VaultWriter,
+): Promise<Orphan[]> {
+  const live = liveIds(db);
+  const orphans: Orphan[] = [];
+
+  for (const folder of Object.keys(FOLDERS) as (keyof typeof FOLDERS)[]) {
+    const names = await writer.list(FOLDERS[folder]);
+
+    for (const name of names) {
+      const match = MANAGED_NAME.exec(name);
+      if (!match) continue;
+
+      const id = Number(match[1]);
+      if (!Number.isSafeInteger(id)) continue;
+      if (live[folder].has(id)) continue;
+
+      orphans.push({ path: `${FOLDERS[folder]}/${name}`, folder, id });
+    }
+  }
+
+  return orphans;
+}
+
 export async function exportToVault(
   db: DB,
   writer: VaultWriter,
@@ -355,5 +444,9 @@ export async function exportToVault(
     }
   }
 
-  return { vaultRoot: writer.root, created, updated, failed, byFolder };
+  // After writing, so a note this run just created is never reported as an
+  // orphan of the run that created it.
+  const orphans = await findOrphans(db, writer);
+
+  return { vaultRoot: writer.root, created, updated, failed, byFolder, orphans };
 }

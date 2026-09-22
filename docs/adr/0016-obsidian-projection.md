@@ -106,3 +106,34 @@ wrong account of what the system knows. So:
   must arrive as a `SourceFetcher` through the normal ingestion path, with
   dedupe, claims and provenance. It must not arrive as an importer that writes
   content state.
+
+## Addendum — reporting orphans (2026-09-22)
+
+Because the export never deletes, a note whose row has since been removed
+stays in the vault pointing at nothing, silently. Clearing a development
+database made that concrete: nine notes survived every row they described.
+
+The export now reports those notes and the System page lists them by path. It
+still deletes nothing. The reasoning that made this one-way in the first place
+applies with more force to deletion than to writing — a projection that
+reached back into a vault to remove files could destroy a note someone had
+moved or rewritten, and the failure would be silent and unrecoverable.
+Reporting gives the visibility without taking the decision.
+
+Two judgements this required:
+
+**Only `{id}-{slug}.md` is ours.** A file someone added themselves, or one of
+ours they renamed, is not an orphan — it is a note whose provenance we cannot
+determine. Calling it an orphan would invite deleting someone's own thinking.
+
+**Orphans are judged against the whole database, not the last export.** The
+export is capped at `DEFAULT_LIMIT`, so comparing the vault against one
+batch would declare every note beyond the cap an orphan. That would be worse
+than no report at all: it would confidently recommend deleting notes whose
+rows are perfectly intact. A test pins this by exporting five notes, then
+re-exporting with a limit of two and asserting no orphans.
+
+This reads the vault, which is worth being precise about against §10. Only
+filenames are read, no note content, and nothing here writes to the database.
+The guard against Obsidian becoming a system of record is the absence of an
+importer, and a report that moves nothing into the database is not one.

@@ -12,11 +12,18 @@ import { createVaultWriter } from '@/adapters/obsidian/vault-writer';
 import { createPublisherRegistry } from '@/adapters/publishers';
 import type { DB } from '@/db/client';
 import * as schema from '@/db/schema';
-import { claims, contentItems, researchItems, sources } from '@/db/schema';
+import {
+  claims,
+  contentItems,
+  contentOpportunities,
+  publicationRecords,
+  researchItems,
+  sources,
+} from '@/db/schema';
 import type { Platform } from '@/domain/content';
 import { saveReading } from './analytics';
 import { act, moveTo, verifyClaim } from './content';
-import { exportToVault, planExport } from './obsidian-export';
+import { exportToVault, findOrphans, planExport } from './obsidian-export';
 import {
   createContentItem,
   createOpportunity,
@@ -180,6 +187,135 @@ describe('planExport', () => {
   });
 });
 
+describe('findOrphans — reported, never deleted', () => {
+  it('finds nothing in a vault that matches the database', async () => {
+    researchItem('A thing');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    expect(await findOrphans(db, writer)).toEqual([]);
+  });
+
+  it('reports a note whose research item was deleted', async () => {
+    const id = researchItem('A thing');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    db.delete(researchItems).where(eq(researchItems.id, id)).run();
+
+    const orphans = await findOrphans(db, writer);
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0]!.id).toBe(id);
+    expect(orphans[0]!.folder).toBe('research');
+    expect(orphans[0]!.path).toContain('Social Media OS/Research/');
+  });
+
+  it('leaves the orphaned file exactly where it is', async () => {
+    // A projection that reached back into the vault to delete could destroy a
+    // note someone had rewritten. Reporting gives visibility without taking
+    // the decision.
+    const id = researchItem('A thing');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+    const file = join(vault, `Social Media OS/Research/${id}-a-thing.md`);
+    const before = await readFile(file, 'utf8');
+
+    db.delete(researchItems).where(eq(researchItems.id, id)).run();
+    await findOrphans(db, writer);
+
+    expect(await readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('does not flag a note merely because the export was capped', async () => {
+    // The trap this feature could most easily fall into: comparing the vault
+    // against the last batch rather than against the database would declare
+    // every note beyond the limit an orphan, and invite deleting notes whose
+    // rows are perfectly intact.
+    for (let i = 0; i < 5; i += 1) researchItem(`Item ${i}`);
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    // A later export sees only the newest two. The other three are untouched
+    // in the vault and alive in the database.
+    const report = await exportToVault(db, writer, 2);
+
+    expect(report.orphans).toEqual([]);
+  });
+
+  it('ignores a file a person put there themselves', async () => {
+    // Not ours to reason about, and certainly not ours to call an orphan.
+    const writer = createVaultWriter(vault);
+    await writer.write('Social Media OS/Research/my-own-thinking.md', 'Mine.');
+
+    expect(await findOrphans(db, writer)).toEqual([]);
+  });
+
+  it('ignores a note of ours that someone renamed', async () => {
+    const id = researchItem('A thing');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+    db.delete(researchItems).where(eq(researchItems.id, id)).run();
+
+    // Renamed out of the managed shape — we can no longer know what it was.
+    await writer.write('Social Media OS/Research/notes-on-openai.md', 'Mine.');
+    const orphans = await findOrphans(db, writer);
+
+    expect(orphans.map((o) => o.path)).not.toContain(
+      'Social Media OS/Research/notes-on-openai.md',
+    );
+  });
+
+  it('finds orphans across every managed folder', async () => {
+    await publishedItem('A launch');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    // Tear the whole chain down, children before parents — the same order
+    // db:clean uses, for the same foreign-key reasons.
+    db.delete(schema.notifications).run();
+    db.delete(schema.agentRuns).run();
+    db.delete(schema.generations).run();
+    db.delete(schema.briefs).run();
+    db.delete(schema.mediaAssets).run();
+    db.delete(schema.learningFindings).run();
+    db.delete(schema.contentExperiments).run();
+    db.delete(schema.analyticsSnapshots).run();
+    db.delete(publicationRecords).run();
+    db.delete(schema.scheduleJobs).run();
+    db.delete(schema.approvalEvents).run();
+    db.delete(schema.contentItemSources).run();
+    db.delete(contentItems).run();
+    db.delete(schema.opportunityResearch).run();
+    db.delete(contentOpportunities).run();
+    db.delete(claims).run();
+    db.delete(researchItems).run();
+
+    const folders = (await findOrphans(db, writer)).map((o) => o.folder);
+    expect(folders).toContain('research');
+    expect(folders).toContain('opportunities');
+    expect(folders).toContain('published');
+  });
+
+  it('treats an unpublished item as an orphan of the published folder', async () => {
+    // The note exists because there was a publication record. Without one it
+    // would no longer be produced, so it is stale in the same way.
+    const id = await publishedItem('A launch');
+    const writer = createVaultWriter(vault);
+    await exportToVault(db, writer);
+
+    db.delete(publicationRecords)
+      .where(eq(publicationRecords.contentItemId, id))
+      .run();
+
+    const orphans = await findOrphans(db, writer);
+    expect(orphans.some((o) => o.folder === 'published' && o.id === id)).toBe(true);
+  });
+
+  it('reports an empty vault as having no orphans', async () => {
+    expect(await findOrphans(db, createVaultWriter(vault))).toEqual([]);
+  });
+});
+
 describe('exportToVault', () => {
   it('reports what it created', async () => {
     researchItem('A thing');
@@ -190,6 +326,8 @@ describe('exportToVault', () => {
     expect(report.failed).toEqual([]);
     expect(report.byFolder.research).toBe(1);
     expect(report.vaultRoot).toBe(vault);
+    // A note this run just created is never an orphan of that run.
+    expect(report.orphans).toEqual([]);
   });
 
   it('writes a readable note', async () => {
@@ -320,6 +458,7 @@ describe('exportToVault', () => {
         if (calls === 1) throw new Error('EACCES');
         return writer.write(path, body);
       },
+      list: (folder: string) => writer.list(folder),
     };
 
     const report = await exportToVault(db, flaky);

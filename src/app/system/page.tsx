@@ -1,4 +1,5 @@
 import { vaultFromEnv } from '@/adapters/obsidian/vault-writer';
+import { findOrphans } from '@/application/obsidian-export';
 import { getDb } from '@/db/runtime';
 import {
   agentUsage,
@@ -43,6 +44,10 @@ export default async function SystemPage() {
 
   const failing = feeds.filter((s) => s.lastError !== null);
   const vault = vaultFromEnv();
+
+  // Computed on load rather than only after an export, so a vault that has
+  // drifted says so without needing to be exported to first.
+  const orphans = vault ? await findOrphans(db, vault) : [];
 
   return (
     <main>
@@ -212,6 +217,28 @@ export default async function SystemPage() {
               <span className="muted small">{vault.root}</span>
             </div>
             <ObsidianExportButton />
+
+            {orphans.length > 0 && (
+              <>
+                <p className="warn small" style={{ marginTop: '0.75rem' }}>
+                  {orphans.length} note(s) no longer have a row behind them.
+                  Nothing has been deleted — a projection that reached back
+                  into your vault could destroy a note you had rewritten, so
+                  removing these is your call.
+                </p>
+                {orphans.slice(0, 20).map((orphan) => (
+                  <div className="row" key={orphan.path}>
+                    <span className="muted small">{orphan.path}</span>
+                    <span className="muted small">{orphan.folder} #{orphan.id}</span>
+                  </div>
+                ))}
+                {orphans.length > 20 && (
+                  <p className="muted small">
+                    …and {orphans.length - 20} more.
+                  </p>
+                )}
+              </>
+            )}
           </>
         ) : (
           <p className="muted small">
