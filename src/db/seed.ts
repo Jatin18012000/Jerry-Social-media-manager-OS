@@ -63,7 +63,7 @@ interface SeedSource {
  * own product is a PRIMARY source for *that announcement*. A publication
  * reporting on it is CREDIBLE_SECONDARY however good the publication is.
  */
-const SOURCES: readonly SeedSource[] = [
+export const SOURCES: readonly SeedSource[] = [
   // --- Official company blogs: primary for their own announcements ---
   {
     name: 'OpenAI Blog',
@@ -153,6 +153,20 @@ const SOURCES: readonly SeedSource[] = [
     feedUrl: 'https://www.technologyreview.com/topic/artificial-intelligence/feed',
     credibilityTier: 'CREDIBLE_SECONDARY',
   },
+];
+
+/**
+ * URLs of the sources this file seeds, plus the lazily-created manual bucket.
+ *
+ * Exported so `db:clean` can tell a seeded §14 source from one a demo run
+ * invented, without hardcoding row ids — which shift the moment anything is
+ * inserted or deleted.
+ */
+export const SEED_SOURCE_URLS: readonly string[] = [
+  ...SOURCES.map((s) => s.url),
+  // Created on demand by the manual-URL path (D5), not by this file, but it
+  // is infrastructure rather than demo data.
+  'about:manual',
 ];
 
 export function seed(databaseUrl = process.env.DATABASE_URL ?? './data/os.db') {

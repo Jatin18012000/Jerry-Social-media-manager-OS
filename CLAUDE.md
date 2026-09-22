@@ -133,6 +133,7 @@ an API endpoint or a rate limit taken from a blog post is a guess.
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Seed §10 pillars and the §14 source list |
 | `npm run db:demo` | One worked example through the whole loop (dev only) |
+| `npm run db:clean` | Remove demo/test data, keeping §10 pillars and §14 sources |
 
 ## The rule behind all of it
 

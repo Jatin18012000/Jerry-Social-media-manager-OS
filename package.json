@@ -18,7 +18,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "check": "npm run typecheck && npm run lint && npm run test",
     "db:seed": "tsx src/db/seed.ts",
-    "db:demo": "tsx scripts/demo-data.ts"
+    "db:demo": "tsx scripts/demo-data.ts",
+    "db:clean": "tsx scripts/clean-demo-data.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

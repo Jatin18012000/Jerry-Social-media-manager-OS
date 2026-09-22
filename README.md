@@ -43,6 +43,7 @@ iPhone on the same network (§46).
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Seed the §10 pillars and the §14 starting source list |
 | `npm run db:demo` | Insert one worked example through the whole loop (dev only) |
+| `npm run db:clean` | Remove demo/test data, keeping §10 pillars and §14 sources |
 
 ---
 
@@ -199,6 +200,20 @@ below the generated marker in a note survives every re-export, so the notes
 are also somewhere to think.
 
 Leaving it unset writes nothing and is a supported configuration.
+
+### Clearing demo data
+
+`npm run db:demo` leaves research, opportunities, content, publications and
+analytics that look exactly like real work on every screen. `npm run db:clean`
+removes all of it and keeps the §10 pillars and the §14 source list, which are
+configuration rather than demo data. Sources are matched by URL, not by row id
+— ids shift as rows come and go.
+
+The brand configuration is kept by default: §4 makes it Jatin's and ChatGPT's
+deliverable, and a cleanup script must not be able to destroy work this
+repository cannot regenerate. If one is set that is not the placeholder, the
+command says so — a brand voice nobody wrote silently suppresses the warning
+that output is generic. `npm run db:clean -- --brand` removes it.
 
 ## What still needs a human
 
