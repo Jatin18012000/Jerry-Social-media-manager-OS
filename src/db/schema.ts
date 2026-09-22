@@ -68,6 +68,23 @@ export const brandConfig = sqliteTable(
     active: integer('active', { mode: 'boolean' }).notNull().default(false),
     payloadJson: text('payload_json').notNull(),
     note: text('note'),
+
+    /**
+     * Denormalised from the payload so "is a real brand voice in use?" is a
+     * query rather than a JSON parse. §57 Risk 1 turns on this answer.
+     */
+    isPlaceholder: integer('is_placeholder', { mode: 'boolean' })
+      .notNull()
+      .default(true),
+
+    /**
+     * Who activated this version, and when. Null until activated.
+     *
+     * §4 makes brand voice a human deliverable, so a production brand in use
+     * with no named human behind it is a fact worth being able to detect.
+     */
+    activatedBy: text('activated_by'),
+    activatedAt: integer('activated_at'),
     ...timestamps,
   },
   (t) => [uniqueIndex('brand_config_version_idx').on(t.version)],
@@ -172,6 +189,19 @@ export const researchItems = sqliteTable(
     relevanceScore: real('relevance_score'),
     importance: integer('importance'),
 
+    /**
+     * §10 pillar this item primarily belongs to, or NULL.
+     *
+     * NULL means UNCLASSIFIED and is a legitimate outcome, not a gap to fill
+     * later: forcing an item into the nearest pillar would be inventing a
+     * classification (§7.1), and pillar analytics excludes unclassified items
+     * rather than assigning them to a category. Assigned by the classifier at
+     * ingestion when it can determine one, and editable by a human.
+     */
+    primaryPillarId: integer('primary_pillar_id').references(
+      () => contentPillars.id,
+    ),
+
     verificationStatus: text('verification_status')
       .$type<VerificationStatus>()
       .notNull()
@@ -188,7 +218,36 @@ export const researchItems = sqliteTable(
     index('research_items_dedupe_idx').on(t.dedupeKey),
     index('research_items_status_idx').on(t.status),
     index('research_items_discovered_idx').on(t.discoveredAt),
+    index('research_items_pillar_idx').on(t.primaryPillarId),
   ],
+);
+
+/**
+ * Secondary pillars for a research item — §10.
+ *
+ * A join table rather than `secondary_1 / secondary_2` columns, because an
+ * event can legitimately span more than two pillars and a fixed pair would be
+ * the wrong model on the first one that does.
+ *
+ * **Human-assigned only.** The classifier supplies the primary pillar; these
+ * are set by Jatin. Early pillar analytics is only worth having if it is
+ * trustworthy, and seeding it with machine guesses would corrupt the
+ * measurement it exists to enable. Automated secondary classification is a
+ * later decision, not an omission.
+ */
+export const researchItemPillars = sqliteTable(
+  'research_item_pillars',
+  {
+    researchItemId: integer('research_item_id')
+      .notNull()
+      .references(() => researchItems.id),
+    pillarId: integer('pillar_id')
+      .notNull()
+      .references(() => contentPillars.id),
+    assignedBy: text('assigned_by').notNull(),
+    assignedAt: integer('assigned_at').notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.researchItemId, t.pillarId] })],
 );
 
 /**

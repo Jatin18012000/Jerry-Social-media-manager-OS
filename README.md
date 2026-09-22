@@ -110,7 +110,8 @@ The domain guards can be bypassed by a bug. The database constraints cannot.
 | **M3** | QA gate, approval queue, scheduler, manual publish, publication records | ✅ done |
 | **M4** | OCR analytics capture, north-star metric | ✅ done |
 | **M5** | Learning engine, findings, dashboard | ✅ done |
-| **M6** | Pre-registered experiments (§30) — the only route to SUPPORTED | ✅ done |
+| **M6** | Pre-registered experiments (§30) — the only route to SUPPORTED | ✅ done (shelved for launch) |
+| **P0** | Launch readiness: brand integrity, research pillars, verification status | ✅ done |
 | M7+ | `LinkedInPublisher`, then `InstagramPublisher` | blocked on platform access |
 
 M1–M6 have no external dependencies and do not wait on platform API access.
@@ -166,7 +167,14 @@ through.
 
 ## Experiments
 
-`/experiments` is the only route to a `SUPPORTED` finding. Observational
+**Shelved for the initial launch phase** (`EXPERIMENTS_MODE=SHELVED`, the
+default). The first content cycle runs observe → measure → learn →
+hypothesise; at the current cadence a two-armed experiment costs ten posts.
+Nothing is deleted — the infrastructure stays compiled and tested, and
+`ACTIVE` restores it. §29's ceiling is unchanged either way: shelving removes
+the ability to run an experiment, not the bar for concluding without one.
+
+When active, `/experiments` is the only route to a `SUPPORTED` finding. Observational
 analysis stops at `HYPOTHESIS` (§29) — a pattern across posts you happened to
 publish is not a cause. §30 opens that door by fixing the hypothesis, the
 metric, the two arms and the minimum sample size *before* the posts go out.
@@ -239,6 +247,28 @@ notes are named `{id}-{slug}.md`. Notes exported before a clean stay in the
 vault as orphans pointing at deleted rows. The System page lists them (see
 below), and the tidy move is to delete the `Social Media OS/` folder and
 re-export.
+
+## Research pillars
+
+Every research item carries a **primary pillar**, which the classifier may
+propose at ingestion and a human may correct, plus optional **secondary
+pillars** which are human-assigned only — no model and no heuristic writes
+them, and each records who assigned it. Early pillar analytics is worth having
+only if it is trustworthy.
+
+An item fitting none of the four approved pillars is `NULL`, shown as
+**UNCLASSIFIED**. It is not pushed into the nearest pillar and there is no
+fifth "Other" bucket; counts report it separately rather than folding it into
+a pillar it does not belong to.
+
+## Verification status
+
+External integrations are labelled `VERIFIED LIVE`, `VERIFIED DOCUMENTATION`,
+`FIXTURE-TESTED ONLY` or `UNVERIFIED`, and nothing is promoted without
+evidence. Most of this system's external surface is fixture-tested only: no
+feed has ever been fetched live from the development environment. The current
+table is in [`P0_LAUNCH_READINESS.md`](P0_LAUNCH_READINESS.md) §5, and ADR 0021
+defines what each label requires.
 
 ## What still needs a human
 

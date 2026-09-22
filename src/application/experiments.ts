@@ -16,6 +16,18 @@
  * that conflict was raised. It is deliberately two-armed and manually
  * assigned: no traffic splitting, no sequential testing, no multi-arm
  * correction. Those are the parts that need volume this account does not have.
+ *
+ * SHELVED for the initial launch phase by product decision. `EXPERIMENTS_MODE`
+ * gates the two entry points — creating and starting — in this layer rather
+ * than in the UI, so no route, script or action can get past it. Everything
+ * else stays compiled, tested and reachable: the mode gates behaviour, not
+ * compilation, and nothing here becomes dead code.
+ *
+ * What shelving does *not* touch: §29's ceiling. Observational findings still
+ * stop at HYPOTHESIS and `promoteWithExperiment` is still the only route to
+ * SUPPORTED. With experiments shelved that route is simply not exercised,
+ * which is the correct reading of "do not claim causal conclusions from
+ * observational data" — the bar is unchanged, not lowered.
  */
 
 import { and, desc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
@@ -49,9 +61,29 @@ import {
   engagementRate,
   followsPerThousandImpressions,
 } from '@/domain/metrics-parse';
+import { experimentsShelved, loadEnv } from '@/config/env';
 import { METRICS, type MetricName } from './learning';
 
 export { ExperimentError };
+
+/**
+ * Refuses the two acts that would start collecting experimental data.
+ *
+ * Reading and concluding are deliberately *not* gated: an experiment that was
+ * already running when the mode changed must still be readable and closable,
+ * and hiding it would strand real data behind a configuration flag.
+ */
+function assertExperimentsActive(opts: { shelved?: boolean } = {}): void {
+  const shelved = opts.shelved ?? experimentsShelved(loadEnv());
+  if (!shelved) return;
+
+  throw new ExperimentError(
+    'Experiments are shelved for the initial launch phase. The first ' +
+      'content cycle observes, measures and forms hypotheses rather than ' +
+      'running controlled tests. Set EXPERIMENTS_MODE=ACTIVE to re-enable ' +
+      'them — nothing has been deleted.',
+  );
+}
 
 /** States in which a content item has actually been measured. */
 const MEASURABLE_STATES = ['PUBLISHED', 'ANALYZING', 'LEARNED'] as const;
@@ -99,8 +131,10 @@ export interface CreateResult {
 export function createExperiment(
   db: DB,
   input: PreRegistrationInput,
-  opts: { now?: Date } = {},
+  opts: { now?: Date; shelved?: boolean } = {},
 ): CreateResult {
+  assertExperimentsActive(opts);
+
   const now = opts.now ?? new Date();
   const validated = validatePreRegistration(input, Object.keys(METRICS));
 
@@ -134,8 +168,10 @@ export function createExperiment(
 export function startExperiment(
   db: DB,
   id: number,
-  opts: { now?: Date } = {},
+  opts: { now?: Date; shelved?: boolean } = {},
 ): void {
+  assertExperimentsActive(opts);
+
   const now = opts.now ?? new Date();
   const record = row(db, id);
 

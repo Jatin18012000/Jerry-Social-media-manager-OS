@@ -1,8 +1,14 @@
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { claims, researchItems, sources } from '@/db/schema';
 import { getDb } from '@/db/runtime';
+import { listPillars, pillarCounts, pillarsForItems } from '@/application/pillars';
 import { ManualUrlForm, PollButton, PromoteForm } from './controls';
+import {
+  PrimaryPillarPicker,
+  RemoveSecondaryButton,
+  SecondaryPillarForm,
+} from './pillar-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,8 +38,27 @@ function hostOf(url: string): string {
  * inference is never mistaken for a verified fact at a glance — which is the
  * whole point of typing them.
  */
-export default async function ResearchPage() {
+export default async function ResearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pillar?: string }>;
+}) {
   const db = getDb();
+  const params = await searchParams;
+  const pillars = listPillars(db);
+  const counts = pillarCounts(db);
+
+  // 'unclassified' is a filter in its own right, not the absence of one:
+  // finding what the classifier could not place is a real triage need.
+  const filter = params.pillar ?? '';
+  const filterPillar = pillars.find((p) => p.slug === filter) ?? null;
+  const filterUnclassified = filter === 'unclassified';
+
+  const pillarWhere = filterUnclassified
+    ? isNull(researchItems.primaryPillarId)
+    : filterPillar
+      ? eq(researchItems.primaryPillarId, filterPillar.id)
+      : undefined;
 
   const items = db
     .select({
@@ -44,12 +69,17 @@ export default async function ResearchPage() {
       discoveredAt: researchItems.discoveredAt,
       relevanceScore: researchItems.relevanceScore,
       status: researchItems.status,
+      primaryPillarId: researchItems.primaryPillarId,
       sourceName: sources.name,
       credibilityTier: sources.credibilityTier,
     })
     .from(researchItems)
     .innerJoin(sources, eq(researchItems.sourceId, sources.id))
-    .where(inArray(researchItems.status, ['NEW', 'TRIAGED']))
+    .where(
+      pillarWhere
+        ? and(inArray(researchItems.status, ['NEW', 'TRIAGED']), pillarWhere)
+        : inArray(researchItems.status, ['NEW', 'TRIAGED']),
+    )
     .orderBy(
       desc(researchItems.relevanceScore),
       desc(researchItems.discoveredAt),
@@ -74,6 +104,7 @@ export default async function ResearchPage() {
     claimsByItem.set(claim.researchItemId, list);
   }
 
+  const itemPillars = pillarsForItems(db, itemIds);
   const sourceRows = db.select().from(sources).all();
   const broken = sourceRows.filter((s) => s.lastError !== null);
 
@@ -121,7 +152,47 @@ export default async function ResearchPage() {
       </section>
 
       <section className="panel">
-        <h2 className="panel-title">Triage queue</h2>
+        <h2 className="panel-title">Pillars</h2>
+        <p className="muted small">
+          The classifier proposes the primary pillar. Secondary pillars are
+          assigned by you and by nothing else — early pillar counts are only
+          worth having if they are trustworthy. An item that fits none of the
+          four is <strong>unclassified</strong>, and is counted as such rather
+          than pushed into the nearest pillar.
+        </p>
+        <div className="form-row">
+          <a href="/research" className={filter === '' ? 'tag' : 'link-button'}>
+            All
+          </a>
+          {counts.counts.map((row) => (
+            <a
+              key={row.pillar.id}
+              href={`/research?pillar=${row.pillar.slug}`}
+              className={filter === row.pillar.slug ? 'tag' : 'link-button'}
+            >
+              {row.pillar.name} ({row.primaryCount}
+              {row.secondaryCount > 0 && ` +${row.secondaryCount}`})
+            </a>
+          ))}
+          <a
+            href="/research?pillar=unclassified"
+            className={filterUnclassified ? 'tag' : 'link-button'}
+          >
+            Unclassified ({counts.unclassified})
+          </a>
+        </div>
+        <p className="muted small">
+          A count shown as <code>4 +1</code> is four items whose primary pillar
+          this is, plus one you also filed here as a secondary.
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2 className="panel-title">
+          Triage queue
+          {filterPillar && ` — ${filterPillar.name}`}
+          {filterUnclassified && ' — unclassified'}
+        </h2>
 
         {items.length === 0 && (
           <p className="muted">
@@ -149,6 +220,46 @@ export default async function ResearchPage() {
               </p>
 
               {item.summary && <p className="summary">{item.summary}</p>}
+
+              <div className="pillars">
+                <PrimaryPillarPicker
+                  researchItemId={item.id}
+                  pillars={pillars}
+                  current={item.primaryPillarId}
+                />
+                {/*
+                  A div, not a p: the buttons below render forms, and a form
+                  inside a paragraph is invalid HTML that React resolves by
+                  reparenting — which shows up as a hydration mismatch.
+                */}
+                <div className="muted small pillar-row">
+                  {item.primaryPillarId === null && (
+                    <span className="tag">UNCLASSIFIED</span>
+                  )}
+                  {(itemPillars.get(item.id)?.secondaries ?? []).map((sec) => (
+                    <span className="secondary-pillar" key={sec.id}>
+                      <span className="tag">
+                        also {sec.name}
+                        <span className="muted"> · {sec.assignedBy}</span>
+                      </span>
+                      <RemoveSecondaryButton
+                        researchItemId={item.id}
+                        pillarId={sec.id}
+                      />
+                    </span>
+                  ))}{' '}
+                  <SecondaryPillarForm
+                    researchItemId={item.id}
+                    pillars={pillars.filter(
+                      (p) =>
+                        p.id !== item.primaryPillarId &&
+                        !(itemPillars.get(item.id)?.secondaries ?? []).some(
+                          (s) => s.id === p.id,
+                        ),
+                    )}
+                  />
+                </div>
+              </div>
 
               <PromoteForm
                 researchItemId={item.id}

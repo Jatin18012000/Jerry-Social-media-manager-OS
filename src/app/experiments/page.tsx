@@ -1,3 +1,4 @@
+import { experimentsShelved, loadEnv } from '@/config/env';
 import { METRICS } from '@/application/learning';
 import { listExperiments } from '@/application/experiments';
 import { getDb } from '@/db/runtime';
@@ -30,6 +31,7 @@ export default async function ExperimentsPage({
 }) {
   const db = getDb();
   const params = await searchParams;
+  const shelved = experimentsShelved(loadEnv());
   const all = listExperiments(db);
 
   const running = all.filter((e) => e.status === 'RUNNING');
@@ -46,21 +48,46 @@ export default async function ExperimentsPage({
         {done.length} finished
       </p>
 
-      <section className="panel">
-        <p className="muted small">
-          Observational analysis can notice a pattern; it cannot establish a
-          cause. §30 is the only route to a SUPPORTED finding, and it works by
-          fixing the hypothesis, the metric, the two arms and the minimum
-          sample size <em>before</em> the posts go out. After that there is no
-          edit path and no early conclusion.
-        </p>
-        <NewExperimentForm
-          metrics={METRIC_OPTIONS}
-          defaultHypothesis={params.hypothesis}
-        />
-      </section>
+      {shelved ? (
+        <section className="panel">
+          <h2 className="panel-title">Parked for the launch phase</h2>
+          <p className="muted small">
+            Experiments are shelved by product decision. The first content
+            cycle runs <strong>observe → measure → learn → hypothesise</strong>
+            {' '}rather than requiring controlled tests: at the current
+            posting cadence a single two-armed experiment costs ten posts, and
+            that is a price worth paying only once there is enough volume for
+            the answer to arrive while it still matters.
+          </p>
+          <p className="muted small">
+            Nothing has been deleted. The infrastructure is intact and tested,
+            and setting <code>EXPERIMENTS_MODE=ACTIVE</code> restores it.
+          </p>
+          <p className="muted small">
+            <strong>What has not changed:</strong> §29&rsquo;s ceiling.
+            Observational findings still stop at HYPOTHESIS, and SUPPORTED is
+            still reachable only through a completed pre-registered
+            experiment. Shelving removes the ability to run one; it does not
+            lower the bar for concluding without one.
+          </p>
+        </section>
+      ) : (
+        <section className="panel">
+          <p className="muted small">
+            Observational analysis can notice a pattern; it cannot establish a
+            cause. §30 is the only route to a SUPPORTED finding, and it works
+            by fixing the hypothesis, the metric, the two arms and the minimum
+            sample size <em>before</em> the posts go out. After that there is
+            no edit path and no early conclusion.
+          </p>
+          <NewExperimentForm
+            metrics={METRIC_OPTIONS}
+            defaultHypothesis={params.hypothesis}
+          />
+        </section>
+      )}
 
-      {all.length === 0 && (
+      {all.length === 0 && !shelved && (
         <section className="panel">
           <p className="muted">
             No experiments yet. The usual starting point is a HYPOTHESIS

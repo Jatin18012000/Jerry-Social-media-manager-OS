@@ -1,19 +1,18 @@
 'use server';
 
 /**
- * Saving the brand configuration — PRD §8, §19, §20.
+ * Saving and activating the brand configuration — PRD §8, §19, §20, §4, §5.
  *
- * §4 assigns brand and content strategy to ChatGPT and §5 forbids this
- * codebase from setting it. So this stores and versions what Jatin and
- * ChatGPT decide; it does not propose any of it.
+ * §4 assigns brand and content strategy to ChatGPT and Jatin, and §5 forbids
+ * this codebase from setting it. This stores and versions what they decide;
+ * it proposes none of it, and it supplies no defaults for any of it.
  */
 
 import { revalidatePath } from 'next/cache';
 
 import { getDb } from '@/db/runtime';
-import { PLACEHOLDER_BRAND } from '@/domain/brand';
 import type { ActionResult } from './action-result';
-import { saveBrandVersion } from './brand';
+import { BrandError, activateBrandVersion, saveBrandDraft } from './brand';
 
 export type { ActionResult } from './action-result';
 
@@ -25,58 +24,114 @@ function lines(value: FormDataEntryValue | null): string[] {
     .filter((line) => line.length > 0);
 }
 
+function field(formData: FormData, name: string): string {
+  return String(formData.get(name) ?? '').trim();
+}
+
 /**
- * Saves a new version of the brand configuration and makes it active.
+ * Saves a new brand version as an inactive draft.
  *
- * A new row rather than an update: §20 wants these centralised and versioned,
- * and versioning is what lets the learning engine later answer "did
- * engagement change after we changed the voice?".
+ * Every field is read from the form explicitly. There is deliberately no
+ * spread of the placeholder underneath: a field the form does not supply must
+ * fail validation rather than quietly inherit placeholder content, which is
+ * precisely how a brand voice nobody wrote once came into use.
+ *
+ * Saving does not activate. Nothing here changes what a brief is written in.
  */
 export async function saveBrand(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const traits = lines(formData.get('traits'));
-
-  if (traits.length === 0) {
-    return { ok: false, message: 'Give the voice at least one trait.' };
-  }
-
   const candidate = {
-    ...PLACEHOLDER_BRAND,
-    brandName: String(formData.get('brandName') ?? '').trim(),
-    positioning: String(formData.get('positioning') ?? '').trim(),
-    audiencePrimary: String(formData.get('audiencePrimary') ?? '').trim(),
-    audienceSecondary: String(formData.get('audienceSecondary') ?? '').trim(),
-    languagePolicy: String(formData.get('languagePolicy') ?? '').trim(),
+    brandName: field(formData, 'brandName'),
+    positioning: field(formData, 'positioning'),
+    audiencePrimary: field(formData, 'audiencePrimary'),
+    audienceSecondary: field(formData, 'audienceSecondary'),
+    languagePolicy: field(formData, 'languagePolicy'),
     voice: {
-      traits,
+      traits: lines(formData.get('traits')),
       does: lines(formData.get('does')),
       avoids: lines(formData.get('avoids')),
       exampleLines: lines(formData.get('exampleLines')),
     },
     character: null,
     designSystem: null,
-    // The whole point of this form: this is no longer a placeholder.
-    isPlaceholder: false,
+    isPlaceholder: false as const,
   };
 
   try {
-    const saved = saveBrandVersion(getDb(), candidate, {
-      note: String(formData.get('note') ?? ''),
+    const saved = saveBrandDraft(getDb(), candidate, {
+      note: field(formData, 'note'),
     });
 
-    revalidatePath('/');
     revalidatePath('/settings/brand');
 
     return {
       ok: true,
       message:
-        `Saved as version ${saved.version}. New briefs will use it; briefs ` +
-        `already composed keep the voice they were written with.`,
+        `Saved as draft version ${saved.version}. It is not in use yet — ` +
+        `activate it below when you are satisfied with it.`,
     };
   } catch (error) {
+    if (error instanceof BrandError) {
+      return { ok: false, message: `Not saved: ${error.message}` };
+    }
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, message: `Could not save: ${message}` };
+  }
+}
+
+/**
+ * Puts a saved draft into use.
+ *
+ * Separate from saving, and requires a named person plus an explicit
+ * confirmation. §4 makes this a human decision and an unattributed one is not
+ * a human decision — it is a side effect.
+ */
+export async function activateBrand(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const version = Number(formData.get('version'));
+  const actor = field(formData, 'actor');
+
+  if (!Number.isInteger(version)) {
+    return { ok: false, message: 'Pick a version to activate.' };
+  }
+
+  if (!actor) {
+    return {
+      ok: false,
+      message:
+        'Type your name to activate. This is recorded, because a brand ' +
+        'voice in use with nobody behind it is the failure this guards ' +
+        'against.',
+    };
+  }
+
+  try {
+    const activated = activateBrandVersion(getDb(), {
+      version,
+      actor,
+      confirm: true,
+    });
+
+    revalidatePath('/');
+    revalidatePath('/settings/brand');
+    revalidatePath('/system');
+
+    return {
+      ok: true,
+      message:
+        `Version ${activated.version} is now the active brand voice. New ` +
+        `briefs will use it; briefs already composed keep the voice they ` +
+        `were written with.`,
+    };
+  } catch (error) {
+    if (error instanceof BrandError) {
+      return { ok: false, message: `Not activated: ${error.message}` };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message: `Could not activate: ${message}` };
   }
 }

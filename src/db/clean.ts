@@ -61,6 +61,7 @@ import {
   notifications,
   opportunityResearch,
   publicationRecords,
+  researchItemPillars,
   researchItems,
   scheduleJobs,
   sources,
@@ -189,6 +190,7 @@ export function clean(
     record('opportunity_research', tx.delete(opportunityResearch).run());
     record('content_opportunities', tx.delete(contentOpportunities).run());
 
+    record('research_item_pillars', tx.delete(researchItemPillars).run());
     record('claims', tx.delete(claims).run());
     record('research_items', tx.delete(researchItems).run());
 

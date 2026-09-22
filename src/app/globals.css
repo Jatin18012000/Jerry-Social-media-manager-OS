@@ -520,3 +520,28 @@ input[type='password'] {
 .stack select {
   width: 100%;
 }
+
+/* Pillar assignment on the research queue (§10). */
+.pillars {
+  margin: 0.5rem 0;
+}
+
+.pillar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.25rem 0;
+}
+
+.pillar-row select,
+.pillar-row input {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.secondary-pillar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}

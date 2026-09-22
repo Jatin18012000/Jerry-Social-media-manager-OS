@@ -310,6 +310,71 @@ describe('ingestSource', () => {
   });
 });
 
+describe('ingestion persists the pillar the classifier determined', () => {
+  it('stores the primary pillar when one was determined', async () => {
+    const sourceId = seedSource();
+
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([
+        {
+          title: 'OpenAI released a new model',
+          url: 'https://example.com/pillar-a',
+          summary: 'OpenAI announces a new model, available today.',
+          publishedAt: new Date('2026-09-20T10:00:00Z'),
+        },
+      ]),
+    );
+
+    const row = db.select().from(researchItems).all()[0];
+    const pillar = db
+      .select()
+      .from(contentPillars)
+      .all()
+      .find((p) => p.id === row?.primaryPillarId);
+
+    // The classifier's answer is no longer discarded at ingestion.
+    expect(row?.primaryPillarId).not.toBeNull();
+    expect(pillar?.slug).toBe('ai-news');
+  });
+
+  it('stores NULL when no pillar could be determined', async () => {
+    // UNCLASSIFIED is an outcome, not a gap. Forcing the nearest pillar
+    // would be inventing a classification (§7.1).
+    const sourceId = seedSource();
+
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([
+        {
+          title: 'Quarterly gardening almanac',
+          url: 'https://example.com/pillar-b',
+          summary: 'Nothing to do with any of the four pillars.',
+          publishedAt: new Date('2026-09-20T10:00:00Z'),
+        },
+      ]),
+    );
+
+    expect(db.select().from(researchItems).all()[0]?.primaryPillarId).toBeNull();
+  });
+
+  it('stores NULL when no pillars are configured at all', async () => {
+    db.delete(contentPillars).run();
+    const sourceId = seedSource();
+
+    await ingestSource(db, sourceId, () =>
+      stubFetcher([
+        {
+          title: 'OpenAI released a new model',
+          url: 'https://example.com/pillar-c',
+          summary: 'OpenAI announces a new model.',
+          publishedAt: new Date('2026-09-20T10:00:00Z'),
+        },
+      ]),
+    );
+
+    expect(db.select().from(researchItems).all()[0]?.primaryPillarId).toBeNull();
+  });
+});
+
 describe('dueSources', () => {
   it('includes a source that has never been polled', () => {
     const id = seedSource();

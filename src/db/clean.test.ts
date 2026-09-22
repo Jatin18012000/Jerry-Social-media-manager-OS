@@ -220,6 +220,45 @@ describe('clean — what it keeps', () => {
   });
 });
 
+describe('clean — the pillar tables', () => {
+  it('removes human-assigned secondary pillars with the research they belong to', () => {
+    // Adding research_item_pillars broke this delete order once. Foreign keys
+    // caught it loudly rather than half-cleaning the database, which is the
+    // point of doing the deletes in one transaction.
+    const pillarId = db
+      .insert(contentPillars)
+      .values({ slug: 'temp-pillar', name: 'Temp' })
+      .returning({ id: contentPillars.id })
+      .get().id;
+
+    const { researchItemId } = demoRow();
+    db.insert(schema.researchItemPillars)
+      .values({ researchItemId, pillarId, assignedBy: 'jatin' })
+      .run();
+    sqlite.close();
+
+    const report = clean(url);
+    db = open();
+
+    expect(report.deleted['research_item_pillars']).toBe(1);
+    expect(db.select().from(schema.researchItemPillars).all()).toHaveLength(0);
+  });
+
+  it('keeps the pillars themselves, which are configuration', () => {
+    const { researchItemId } = demoRow();
+    const pillar = db.select().from(contentPillars).all()[0]!;
+    db.insert(schema.researchItemPillars)
+      .values({ researchItemId, pillarId: pillar.id, assignedBy: 'jatin' })
+      .run();
+    sqlite.close();
+
+    clean(url);
+    db = open();
+
+    expect(db.select().from(contentPillars).all().length).toBeGreaterThan(0);
+  });
+});
+
 describe('clean — autoincrement sequences', () => {
   /** What SQLite will hand out next for a table, without inserting. */
   function nextId(table: string): number {

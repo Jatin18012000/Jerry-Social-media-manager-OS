@@ -25,6 +25,7 @@ import {
   type ParsedMetrics,
   engagementRate,
   followsPerThousandImpressions,
+  disallowedMetricsFor,
   needsConfirmation,
   parseMetrics,
 } from '@/domain/metrics-parse';
@@ -106,13 +107,30 @@ export function saveReading(db: DB, input: SaveReadingInput): number {
   }
 
   const item = db
-    .select({ state: contentItems.state })
+    .select({ state: contentItems.state, platform: contentItems.platform })
     .from(contentItems)
     .where(eq(contentItems.id, input.contentItemId))
     .get();
 
   if (!item) {
     throw new AnalyticsError(`No content item ${input.contentItemId}`);
+  }
+
+  // A metric the platform does not report per post cannot be attributed to a
+  // post here either. The OCR path is already filtered by the same list, so
+  // this closes manual entry — otherwise account-level follower growth could
+  // be typed against one post and become "evidence" it caused them.
+  const disallowed = disallowedMetricsFor(
+    item.platform,
+    Object.keys(input.metrics) as MetricKey[],
+  );
+
+  if (disallowed.length > 0) {
+    throw new AnalyticsError(
+      `${item.platform} does not report ${disallowed.join(', ')} for an ` +
+        `individual post, so it cannot be attributed to one. Account-level ` +
+        `figures stay account-level.`,
+    );
   }
 
   const published = db

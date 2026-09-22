@@ -137,3 +137,29 @@ This reads the vault, which is worth being precise about against §10. Only
 filenames are read, no note content, and nothing here writes to the database.
 The guard against Obsidian becoming a system of record is the absence of an
 importer, and a report that moves nothing into the database is not one.
+
+## Addendum — the approved future import path (2026-09-22, P0)
+
+Product decision: Obsidian **remains one-way** for now. No importer is built,
+and the database stays the sole system of record.
+
+The intended future architecture is recorded here so that if an importer is
+ever built, it is built this way rather than the obvious way:
+
+```
+Obsidian note → SourceFetcher → dedupe → provenance → claims
+              → verification → research item
+```
+
+A note would enter through the **same ingestion path as any other source**,
+with §15 dedupe, §16 claim-granular provenance and §7.2 verification. It would
+become a research item and nothing more.
+
+**An Obsidian importer may never write content state.** Not a draft, not an
+approval, not a schedule, not a publication record. §22's guarantee is that
+nothing publishes without human approval, and a file on disk that could move
+an item toward publication would make that guarantee a property of the
+filesystem. A note is a *source*, on the same footing as an RSS feed — which
+is also untrusted text from outside the system.
+
+Not implemented, and not to be implemented without a product decision.

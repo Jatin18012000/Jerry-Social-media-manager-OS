@@ -1,3 +1,4 @@
+import { experimentsShelved, loadEnv } from '@/config/env';
 import { getDb } from '@/db/runtime';
 import { awaitingMetrics, latestPerformance } from '@/application/analytics';
 import { gaps, presentableFindings } from '@/application/learning';
@@ -21,6 +22,9 @@ export default async function AnalyticsPage() {
   const performance = latestPerformance(db);
   const pending = awaitingMetrics(db);
   const findings = presentableFindings(db);
+  // Experiments are parked for the launch phase, so a route into
+  // pre-registration would advertise something that refuses to run.
+  const experimentsParked = experimentsShelved(loadEnv());
   const insufficient = gaps(db);
 
   return (
@@ -85,7 +89,7 @@ export default async function AnalyticsPage() {
                 pre-registration, which is what §30 requires before the
                 finding could ever read as a cause.
               */}
-              {finding.status === 'HYPOTHESIS' && (
+              {finding.status === 'HYPOTHESIS' && !experimentsParked && (
                 <>
                   {' '}
                   <a

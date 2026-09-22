@@ -74,6 +74,56 @@ export const brandConfigSchema = z.object({
 export type BrandConfig = z.infer<typeof brandConfigSchema>;
 export type Voice = z.infer<typeof voiceSchema>;
 
+/**
+ * The stricter shape a *production* brand must satisfy.
+ *
+ * `brandConfigSchema` is permissive because it also has to read back the
+ * seeded placeholder and older versions. This one governs the only path that
+ * can produce a real brand voice, and it is deliberately unforgiving:
+ *
+ *   Nothing defaults. A field left blank is a validation failure, not an
+ *   empty string quietly stored. The incident this guards against was a
+ *   production brand that inherited placeholder content field by field, and
+ *   defaults are how that happens silently.
+ *
+ *   `isPlaceholder` must be literally false. A production brand cannot be
+ *   created by omitting the flag and letting a default decide.
+ *
+ * §4 and §5 still apply: this constrains the *shape* of the answer. The
+ * answer itself comes from Jatin and ChatGPT and is not proposed here.
+ */
+export const productionBrandSchema = z.object({
+  brandName: nonEmpty,
+  positioning: nonEmpty,
+  audiencePrimary: nonEmpty,
+  audienceSecondary: nonEmpty,
+  languagePolicy: nonEmpty,
+  voice: z.object({
+    traits: z.array(nonEmpty).min(1),
+    does: z.array(nonEmpty).min(1),
+    avoids: z.array(nonEmpty).min(1),
+    // The single most useful field for generation quality, so a production
+    // brand may not ship without at least one.
+    exampleLines: z.array(nonEmpty).min(1),
+  }),
+  character: characterSchema.nullable(),
+  designSystem: designSystemSchema.nullable(),
+  isPlaceholder: z.literal(false),
+});
+
+export function safeParseProductionBrand(
+  payload: unknown,
+): { ok: true; config: BrandConfig } | { ok: false; error: string } {
+  const result = productionBrandSchema.safeParse(payload);
+  if (result.success) return { ok: true, config: result.data };
+  return {
+    ok: false,
+    error: result.error.issues
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; '),
+  };
+}
+
 export function parseBrandConfig(payload: unknown): BrandConfig {
   return brandConfigSchema.parse(payload);
 }

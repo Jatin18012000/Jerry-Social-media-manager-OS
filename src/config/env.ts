@@ -49,6 +49,17 @@ const schema = z.object({
    */
   OBSIDIAN_VAULT_PATH: z.string().optional(),
 
+  /**
+   * §30 experiments. SHELVED for the initial launch phase by product
+   * decision: the first content cycle runs OBSERVE → MEASURE → LEARN →
+   * HYPOTHESIZE rather than requiring controlled experiments.
+   *
+   * Shelving removes the ability to *run* an experiment. It does not lower
+   * the bar for concluding without one — §29's ceiling is unchanged, and
+   * SUPPORTED remains reachable only through a completed experiment.
+   */
+  EXPERIMENTS_MODE: z.enum(['SHELVED', 'ACTIVE']).default('SHELVED'),
+
   /** D4. OCR with a manual fallback. */
   ANALYTICS_MODE: z.enum(['OCR', 'MANUAL', 'API']).default('OCR'),
 });
@@ -95,4 +106,9 @@ export function loadEnv(
 /** True when running the free, local, MacBook-only configuration (§32, §34). */
 export function isFoundationMode(env: Env): boolean {
   return env.MODE === 'FOUNDATION';
+}
+
+/** True while §30 experiments are parked for the launch phase. */
+export function experimentsShelved(env: Env): boolean {
+  return env.EXPERIMENTS_MODE === 'SHELVED';
 }

@@ -63,6 +63,18 @@ const LABELS: Record<MetricKey, readonly string[]> = {
  * discovery — §7.1 forbids inventing platform capabilities, so anything
  * outside this set is dropped.
  */
+/**
+ * Which metrics each platform reports **at post level**.
+ *
+ * This is an attribution boundary, not a convenience filter. A number the
+ * platform does not report per post cannot be attributed to a post by us:
+ * account-level follower growth stays an account-level fact, and assigning it
+ * to whatever was published nearby is inference dressed as measurement.
+ *
+ * Which platforms report post-level follows is a vendor fact that has not been
+ * verified from a primary source. The list is therefore the lever, and it is
+ * not changed without evidence (§7.1, §7.2).
+ */
 const PLATFORM_METRICS: Record<Platform, readonly MetricKey[]> = {
   INSTAGRAM: [
     'reach',
@@ -393,4 +405,25 @@ export function engagementRate(input: {
 
   const engagements = parts.reduce((sum, v) => sum + v, 0);
   return Number(((engagements / denominator) * 100).toFixed(4));
+}
+
+/**
+ * Whether this platform reports this metric at post level.
+ *
+ * The single place that question is answered, so the parser and manual entry
+ * cannot disagree about what may be attributed to a post.
+ */
+export function metricAllowedForPlatform(
+  platform: Platform,
+  key: MetricKey,
+): boolean {
+  return PLATFORM_METRICS[platform].includes(key);
+}
+
+/** Metrics that may not be attributed to a post on this platform. */
+export function disallowedMetricsFor(
+  platform: Platform,
+  keys: readonly MetricKey[],
+): MetricKey[] {
+  return keys.filter((key) => !metricAllowedForPlatform(platform, key));
 }

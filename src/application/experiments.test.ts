@@ -33,6 +33,7 @@ import {
   startExperiment,
   unassignVariant,
 } from './experiments';
+import { analyseAll } from '@/domain/learning';
 import { recomputeFindings } from './learning';
 import {
   createContentItem,
@@ -44,6 +45,15 @@ import { confirmManualPublish, runDueJobs, scheduleItem } from './schedule';
 
 let sqlite: Database.Database;
 let db: DB;
+
+/**
+ * The existing suite runs with experiments explicitly ACTIVE.
+ *
+ * Shelving is a launch-phase product decision, not a removal: the
+ * infrastructure must stay compiled, reachable and proven, so these tests
+ * opt in rather than being deleted or skipped.
+ */
+const ACTIVE = { shelved: false } as const;
 
 const NOW = new Date('2026-09-21T12:00:00Z');
 const SLOT = new Date('2026-09-21T13:00:00Z');
@@ -152,11 +162,11 @@ async function publishedItem(
 
 /** A started experiment. */
 function running(overrides: Partial<typeof GOOD> = {}): number {
-  const created = createExperiment(db, { ...GOOD, ...overrides }, { now: NOW });
+  const created = createExperiment(db, { ...GOOD, ...overrides }, { now: NOW, shelved: false });
   if (!created.ok || created.id === undefined) {
     throw new Error(`fixture failed: ${created.errors?.join('; ')}`);
   }
-  startExperiment(db, created.id, { now: NOW });
+  startExperiment(db, created.id, { now: NOW, shelved: false });
   return created.id;
 }
 
@@ -202,9 +212,74 @@ beforeEach(() => {
   migrate(db as never, { migrationsFolder: './drizzle' });
 });
 
+describe('E — experiments refuse to run while SHELVED', () => {
+  it('refuses to create an experiment', () => {
+    expect(() => createExperiment(db, GOOD, { now: NOW, shelved: true })).toThrow(
+      /shelved for the initial launch phase/,
+    );
+  });
+
+  it('writes nothing when creation is refused', () => {
+    try {
+      createExperiment(db, GOOD, { now: NOW, shelved: true });
+    } catch {
+      // expected
+    }
+    expect(db.select().from(experiments).all()).toHaveLength(0);
+  });
+
+  it('refuses to start an experiment', () => {
+    const created = createExperiment(db, GOOD, { now: NOW, ...ACTIVE });
+    expect(() =>
+      startExperiment(db, created.id!, { now: NOW, shelved: true }),
+    ).toThrow(/shelved for the initial launch phase/);
+    expect(db.select().from(experiments).get()?.status).toBe('DRAFT');
+  });
+
+  it('says how to re-enable, and that nothing was deleted', () => {
+    expect(() => createExperiment(db, GOOD, { now: NOW, shelved: true })).toThrow(
+      /EXPERIMENTS_MODE=ACTIVE/,
+    );
+    expect(() => createExperiment(db, GOOD, { now: NOW, shelved: true })).toThrow(
+      /nothing has been deleted/i,
+    );
+  });
+
+  it('still allows reading and concluding a running experiment', async () => {
+    // An experiment already running when the mode changed must stay readable
+    // and closable. Stranding real data behind a flag would be worse than
+    // never having run it.
+    const id = running();
+    await fill(id, 'English', 5, 10);
+    await fill(id, 'Hinglish', 5, 40);
+
+    expect(listExperiments(db)).toHaveLength(1);
+    expect(conclusionBlocker(db, id)).toBeNull();
+    expect(concludeExperiment(db, id, { now: SLOT }).conclusion.verdict).toBe(
+      'SUPPORTED',
+    );
+  });
+
+  it('leaves §29 exactly where it was', () => {
+    // Shelving removes the ability to run an experiment. It does not lower
+    // the bar for concluding without one: observational analysis still
+    // cannot reach SUPPORTED, however large the effect or the sample.
+    const observations = Array.from({ length: 60 }, (_, i) => ({
+      contentItemId: i + 1,
+      value: i % 2 === 0 ? 100 : 1,
+      dimensions: { language: i % 2 === 0 ? 'HINGLISH' : 'EN' },
+    }));
+
+    const findings = analyseAll(observations, 'follows/1k');
+
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.some((f) => f.status === 'SUPPORTED')).toBe(false);
+  });
+});
+
 describe('createExperiment', () => {
   it('registers a draft', () => {
-    const created = createExperiment(db, GOOD, { now: NOW });
+    const created = createExperiment(db, GOOD, { now: NOW, shelved: false });
     expect(created.ok).toBe(true);
 
     const record = db.select().from(experiments).get();
@@ -214,7 +289,7 @@ describe('createExperiment', () => {
   });
 
   it('refuses an incomplete registration and says what is missing', () => {
-    const created = createExperiment(db, { hypothesis: 'x' }, { now: NOW });
+    const created = createExperiment(db, { hypothesis: 'x' }, { now: NOW, shelved: false });
     expect(created.ok).toBe(false);
     expect(created.errors?.length).toBeGreaterThan(2);
     // Nothing is stored, so a half-registered experiment cannot be started.
@@ -224,15 +299,15 @@ describe('createExperiment', () => {
   it('refuses a metric the learning engine cannot compute', () => {
     // Validated at creation rather than at start, so an experiment cannot sit
     // in the list looking ready when it could never be concluded.
-    const created = createExperiment(db, { ...GOOD, metric: 'vibes' }, { now: NOW });
+    const created = createExperiment(db, { ...GOOD, metric: 'vibes' }, { now: NOW, shelved: false });
     expect(created.ok).toBe(false);
   });
 });
 
 describe('startExperiment', () => {
   it('starts a draft and stamps the start time', () => {
-    const created = createExperiment(db, GOOD, { now: NOW });
-    startExperiment(db, created.id!, { now: NOW });
+    const created = createExperiment(db, GOOD, { now: NOW, shelved: false });
+    startExperiment(db, created.id!, { now: NOW, shelved: false });
 
     const record = db.select().from(experiments).get();
     expect(record?.status).toBe('RUNNING');
@@ -241,19 +316,19 @@ describe('startExperiment', () => {
 
   it('will not start the same experiment twice', () => {
     const id = running();
-    expect(() => startExperiment(db, id, { now: NOW })).toThrow(ExperimentError);
+    expect(() => startExperiment(db, id, { now: NOW, shelved: false })).toThrow(ExperimentError);
   });
 
   it('will not start an abandoned experiment', () => {
-    const created = createExperiment(db, GOOD, { now: NOW });
+    const created = createExperiment(db, GOOD, { now: NOW, shelved: false });
     abandonExperiment(db, created.id!, 'changed my mind', { now: NOW });
-    expect(() => startExperiment(db, created.id!, { now: NOW })).toThrow(
+    expect(() => startExperiment(db, created.id!, { now: NOW, shelved: false })).toThrow(
       ExperimentError,
     );
   });
 
   it('refuses an experiment that does not exist', () => {
-    expect(() => startExperiment(db, 999, { now: NOW })).toThrow(ExperimentError);
+    expect(() => startExperiment(db, 999, { now: NOW, shelved: false })).toThrow(ExperimentError);
   });
 });
 
@@ -285,7 +360,7 @@ describe('assignVariant', () => {
 
   it('refuses to assign to a draft', async () => {
     // Data before the terms are fixed is not a pre-registered experiment.
-    const created = createExperiment(db, GOOD, { now: NOW });
+    const created = createExperiment(db, GOOD, { now: NOW, shelved: false });
     const itemId = await publishedItem('A post');
     expect(() =>
       assignVariant(db, {

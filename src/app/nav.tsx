@@ -1,4 +1,5 @@
 import { getDb } from '@/db/runtime';
+import { experimentsShelved, loadEnv } from '@/config/env';
 import { unreadCount } from '@/adapters/notifiers/in-app-notifier';
 
 import { SignOutLink } from './sign-out';
@@ -17,6 +18,10 @@ export async function Nav() {
     // reachable yet. A missing badge is better than a broken page.
   }
 
+  // Parked for the launch phase, so it is not offered as somewhere to go.
+  // The route itself still resolves and explains why — see /experiments.
+  const shelved = experimentsShelved(loadEnv());
+
   return (
     <nav className="top">
       <a href="/">Overview</a>
@@ -25,7 +30,7 @@ export async function Nav() {
       <a href="/review">Review</a>
       <a href="/schedule">Schedule</a>
       <a href="/analytics">Analytics</a>
-      <a href="/experiments">Experiments</a>
+      {!shelved && <a href="/experiments">Experiments</a>}
       <a href="/notifications">
         Inbox
         {unread > 0 && <span className="nav-count">{unread}</span>}
