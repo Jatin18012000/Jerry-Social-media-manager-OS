@@ -194,28 +194,53 @@ export default async function ContentPage({
 
       <section className="panel">
         <h2 className="panel-title">Brief</h2>
-        {!latestBrief &&
-          (canCompose ? (
-            <>
-              <p className="muted small">Ready to compose.</p>
-              <ComposeBriefButton contentItemId={contentItemId} />
-            </>
-          ) : (
-            // The button used to render here in every state, including IDEA,
-            // directly under text saying the item was not ready for it. An
-            // action that cannot legally run should not be offered.
+        {/*
+          Offered whenever composing is legal, whether or not a brief already
+          exists. Hiding it once any brief had been written stranded items that
+          picked one up early: the only way into GENERATING is to compose, so
+          an item with a stale brief had no way forward at all.
+        */}
+        {canCompose && (
+          <>
             <p className="muted small">
-              The item is in {item.state}. Composing a brief starts generation,
-              which is only legal from STRATEGY_READY or NEEDS_REVISION — use
-              the Lifecycle panel above to get there.
+              {latestBrief
+                ? 'Composing again writes a fresh brief from the current claims and content, and moves this item to GENERATING.'
+                : 'Ready to compose.'}
             </p>
-          ))}
+            <ComposeBriefButton contentItemId={contentItemId} />
+          </>
+        )}
+
+        {!canCompose && !latestBrief && (
+          // An action that cannot legally run should not be offered.
+          <p className="muted small">
+            The item is in {item.state}. Composing a brief starts generation,
+            which is only legal from STRATEGY_READY or NEEDS_REVISION — use the
+            Lifecycle panel above to get there.
+          </p>
+        )}
+
         {latestBrief && (
-          <BriefPanel
-            contentItemId={contentItemId}
-            briefId={latestBrief.id}
-            promptText={latestBrief.promptText}
-          />
+          <>
+            {item.state !== 'GENERATING' && (
+              // Pasting a response only advances the item from GENERATING.
+              // Anywhere else it saves the generation and changes no state,
+              // which from the outside looks exactly like nothing happening.
+              <p className="warn small">
+                This brief was composed earlier. Pasting a response here will
+                be saved but will <strong>not</strong> move the item on —
+                that only happens from GENERATING.
+                {canCompose
+                  ? ' Compose a fresh brief above to get there.'
+                  : ' Use the Lifecycle panel above to get there.'}
+              </p>
+            )}
+            <BriefPanel
+              contentItemId={contentItemId}
+              briefId={latestBrief.id}
+              promptText={latestBrief.promptText}
+            />
+          </>
         )}
       </section>
 

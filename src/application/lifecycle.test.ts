@@ -27,6 +27,7 @@ import {
   buildBrief,
   createContentItem,
   createOpportunity,
+  saveGeneration,
   scopedClaimsWithIds,
 } from './opportunities';
 import { submitForReview } from './qa';
@@ -410,5 +411,72 @@ describe('how the item got into the observed state', () => {
     expect(
       db.select().from(contentItems).where(eq(contentItems.id, id)).get()?.state,
     ).toBe('GENERATING');
+  });
+});
+
+describe('an item that already has a brief is not stranded', () => {
+  /** Walks a bare item to STRATEGY_READY. */
+  function toStrategyReady(): number {
+    const id = bareItem();
+    fillContent(id);
+    advancePipeline(db, id, 'RESEARCHING', { actor: 'jatin' });
+    advancePipeline(db, id, 'RESEARCH_VERIFIED', { actor: 'jatin' });
+    advancePipeline(db, id, 'STRATEGY_READY', { actor: 'jatin' });
+    return id;
+  }
+
+  it('composing again writes a fresh brief and advances to GENERATING', () => {
+    // The escape hatch for an item that picked up a brief early. Hiding the
+    // compose control once any brief existed left such an item with no way
+    // into GENERATING at all, because composing is the only route there.
+    const id = bareItem();
+    fillContent(id);
+    const stale = buildBrief(db, id, { actor: 'jatin' }); // composed from IDEA
+
+    advancePipeline(db, id, 'RESEARCHING', { actor: 'jatin' });
+    advancePipeline(db, id, 'RESEARCH_VERIFIED', { actor: 'jatin' });
+    advancePipeline(db, id, 'STRATEGY_READY', { actor: 'jatin' });
+
+    const fresh = buildBrief(db, id, { actor: 'jatin' });
+
+    expect(fresh.briefId).not.toBe(stale.briefId);
+    expect(
+      db.select().from(contentItems).where(eq(contentItems.id, id)).get()?.state,
+    ).toBe('GENERATING');
+  });
+
+  it('pasting a generation outside GENERATING saves but does not advance', () => {
+    // Pinned because the UI now warns about exactly this. If the behaviour
+    // ever changes, the warning becomes a lie and this test says so.
+    const id = toStrategyReady();
+    const { briefId } = buildBrief(db, id, { actor: 'jatin' });
+    moveTo(db, id, 'QA', { actor: 'jatin' });
+
+    saveGeneration(db, {
+      contentItemId: id,
+      briefId,
+      rawResponse: '# Hook\nA hook.\n\n## Body\nA body.',
+      actor: 'jatin',
+    });
+
+    expect(
+      db.select().from(contentItems).where(eq(contentItems.id, id)).get()?.state,
+    ).toBe('QA');
+  });
+
+  it('pasting from GENERATING does advance to QA', () => {
+    const id = toStrategyReady();
+    const { briefId } = buildBrief(db, id, { actor: 'jatin' });
+
+    saveGeneration(db, {
+      contentItemId: id,
+      briefId,
+      rawResponse: '# Hook\nA hook.\n\n## Body\nA body.',
+      actor: 'jatin',
+    });
+
+    expect(
+      db.select().from(contentItems).where(eq(contentItems.id, id)).get()?.state,
+    ).toBe('QA');
   });
 });
