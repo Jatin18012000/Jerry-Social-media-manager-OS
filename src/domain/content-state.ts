@@ -129,8 +129,15 @@ export interface TransitionContext {
   readonly hasPublicationEvidence?: boolean;
 
   /**
-   * True when the item has at least one linked claim and none of its linked
-   * claims are UNVERIFIED. Required to leave RESEARCH_VERIFIED. PRD §7, §16.
+   * True when none of the item's linked claims are UNVERIFIED. Required to
+   * enter STRATEGY_READY. PRD §7, §16.
+   *
+   * An item with *no* linked claims satisfies this, and deliberately so: an
+   * opinion piece or a personal story rests on no external claim, and
+   * requiring one would make those unpublishable. The application layer
+   * computes it that way — see `transitionContextFor`. Do not "fix" this to
+   * demand at least one claim without changing that too, and without a
+   * product decision behind it.
    */
   readonly allClaimsVerified?: boolean;
 

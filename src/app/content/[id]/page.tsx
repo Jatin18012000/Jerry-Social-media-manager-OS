@@ -4,15 +4,50 @@ import { notFound } from 'next/navigation';
 import { briefs, contentItems, generations } from '@/db/schema';
 import { getDb } from '@/db/runtime';
 import { scopedClaims, scopedClaimsWithIds } from '@/application/opportunities';
-import { historyOf } from '@/application/content';
+import { historyOf, nextPipelineStep } from '@/application/content';
 import {
+  AdvanceButton,
   BriefPanel,
   ClaimVerifier,
   ComposeBriefButton,
   EditContentForm,
+  SendToReviewButton,
 } from './controls';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * What each pipeline step is called for a person.
+ *
+ * Labels only — which step is legal is decided by the domain and reported by
+ * `nextPipelineStep`. If a state is missing here the button still works and
+ * simply reads "Move to X", because a missing label must not be able to
+ * strand an item the way a missing control already did once.
+ */
+const STEP_LABELS: Readonly<Record<string, string>> = {
+  RESEARCHING: 'Start research',
+  RESEARCH_VERIFIED: 'Mark research verified',
+  STRATEGY_READY: 'Prepare strategy',
+};
+
+/** Where an item goes next when a dedicated screen or action owns the step. */
+const HANDED_OFF: Readonly<Record<string, string>> = {
+  STRATEGY_READY: 'Compose the brief below to start generating.',
+  GENERATING: 'Paste the generated content back in the Brief panel below.',
+  NEEDS_REVISION:
+    'Edit the content below, then compose a brief again — a revision must ' +
+    'pass QA and review afresh.',
+  READY_FOR_REVIEW: 'Waiting for your decision on the Review screen.',
+  APPROVED: 'Approved. Schedule it from the Schedule screen.',
+  SCHEDULED: 'Scheduled. The runner will publish it when it is due.',
+  PUBLISHING: 'Publishing — confirm it on the Review screen once posted.',
+  PUBLISHED: 'Published. Capture metrics on the Analytics screen.',
+  ANALYZING: 'Capturing metrics. Add readings on the Analytics screen.',
+  LEARNED: 'Complete. This item has been folded into what the system knows.',
+  REJECTED: 'Rejected. This item is closed.',
+  CANCELLED: 'Cancelled. This item is closed.',
+  FAILED: 'Something failed. Edit it to send it back for revision.',
+};
 
 /**
  * The content item screen — PRD §17, §23, decision D3.
@@ -62,6 +97,12 @@ export default async function ContentPage({
     .get();
 
   const history = historyOf(db, contentItemId);
+  const step = nextPipelineStep(db, contentItemId);
+
+  // buildBrief moves the item to GENERATING, which is legal only from these
+  // two states. Offering the button elsewhere exposes an action that fails.
+  const canCompose =
+    item.state === 'STRATEGY_READY' || item.state === 'NEEDS_REVISION';
 
   return (
     <main>
@@ -80,6 +121,46 @@ export default async function ContentPage({
           {item.language} · {item.characterMode}
         </span>
       </p>
+
+      <section className="panel">
+        <h2 className="panel-title">Lifecycle</h2>
+        <p className="muted small">
+          This item is in <strong>{item.state}</strong>. Every move is checked
+          against the state machine and recorded in the history below — §22
+          means nothing reaches a schedule without passing review first.
+        </p>
+
+        {step !== null && (
+          <>
+            <AdvanceButton
+              contentItemId={contentItemId}
+              to={step.to}
+              label={STEP_LABELS[step.to] ?? `Move to ${step.to}`}
+            />
+            {step.to === 'STRATEGY_READY' && claimRows.length > 0 && (
+              <p className="muted small">
+                Every attached claim must be verified first (§16). Unverified
+                ones will block this step and say so.
+              </p>
+            )}
+          </>
+        )}
+
+        {item.state === 'QA' && <SendToReviewButton contentItemId={contentItemId} />}
+
+        {step === null && item.state !== 'QA' && (
+          <p className="muted small">
+            {HANDED_OFF[item.state] ??
+              'No pipeline action from here — see the history below.'}
+          </p>
+        )}
+
+        {item.state === 'READY_FOR_REVIEW' && (
+          <p className="small">
+            <a href="/review">Go to Review →</a>
+          </p>
+        )}
+      </section>
 
       <section className="panel">
         <h2 className="panel-title">
@@ -113,16 +194,22 @@ export default async function ContentPage({
 
       <section className="panel">
         <h2 className="panel-title">Brief</h2>
-        {!latestBrief && (
-          <>
+        {!latestBrief &&
+          (canCompose ? (
+            <>
+              <p className="muted small">Ready to compose.</p>
+              <ComposeBriefButton contentItemId={contentItemId} />
+            </>
+          ) : (
+            // The button used to render here in every state, including IDEA,
+            // directly under text saying the item was not ready for it. An
+            // action that cannot legally run should not be offered.
             <p className="muted small">
-              {item.state === 'STRATEGY_READY' || item.state === 'NEEDS_REVISION'
-                ? 'Ready to compose.'
-                : `The item is in ${item.state}. Verify claims and walk it to STRATEGY_READY first.`}
+              The item is in {item.state}. Composing a brief starts generation,
+              which is only legal from STRATEGY_READY or NEEDS_REVISION — use
+              the Lifecycle panel above to get there.
             </p>
-            <ComposeBriefButton contentItemId={contentItemId} />
-          </>
-        )}
+          ))}
         {latestBrief && (
           <BriefPanel
             contentItemId={contentItemId}

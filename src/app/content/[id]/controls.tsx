@@ -4,11 +4,13 @@ import { useActionState, useState } from 'react';
 
 import type { ActionResult } from '@/application/action-result';
 import {
+  advanceLifecycle,
   composeBriefFor,
   editContentFields,
   submitClaimVerification,
   submitGeneration,
 } from '@/application/content-actions';
+import { sendToReview } from '@/application/schedule-actions';
 
 export function ComposeBriefButton({
   contentItemId,
@@ -308,6 +310,67 @@ export function EditContentForm({
           </p>
         )}
       </div>
+    </form>
+  );
+}
+
+/**
+ * Advances the item one step along the pipeline.
+ *
+ * The label comes from the server, which derives the step from the domain's
+ * own transition table. Hardcoding a path here would be a second copy of the
+ * state machine, free to drift from the real one.
+ */
+export function AdvanceButton({
+  contentItemId,
+  to,
+  label,
+}: {
+  contentItemId: number;
+  to: string;
+  label: string;
+}) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(
+    advanceLifecycle,
+    null,
+  );
+
+  return (
+    <form action={action} className="form-row">
+      <input type="hidden" name="contentItemId" value={contentItemId} />
+      <input type="hidden" name="to" value={to} />
+      <button type="submit" disabled={pending}>
+        {pending ? 'Working…' : label}
+      </button>
+      {state && (
+        <p className={state.ok ? 'ok small' : 'error small'}>{state.message}</p>
+      )}
+    </form>
+  );
+}
+
+/**
+ * Runs the QA gate and, if it passes, puts the item in the review queue.
+ *
+ * The same server action the review screen uses. Reusing it rather than
+ * writing a second one is what keeps QA a single gate — §22 is only worth
+ * anything if there is exactly one way through it.
+ */
+export function SendToReviewButton({ contentItemId }: { contentItemId: number }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(
+    sendToReview,
+    null,
+  );
+
+  return (
+    <form action={action} className="form-row">
+      <input type="hidden" name="contentItemId" value={contentItemId} />
+      <button type="submit" disabled={pending}>
+        {pending ? 'Checking…' : 'Run QA and send to review'}
+      </button>
+      {state && (
+        <p className={state.ok ? 'ok small' : 'error small'}>{state.message}</p>
+      )}
     </form>
   );
 }

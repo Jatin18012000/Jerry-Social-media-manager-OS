@@ -31,6 +31,7 @@ import {
   availableActions,
   transition,
 } from '@/domain/content-state';
+import { IllegalTransitionError } from '@/domain/errors';
 import { blocksProgress } from '@/domain/evidence';
 
 export class ContentNotFoundError extends Error {
@@ -166,6 +167,100 @@ export function act(
   });
 
   return moveTo(db, contentItemId, event.to, { ...opts, note: event.note ?? '' });
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline advancement
+// ---------------------------------------------------------------------------
+
+/**
+ * Forward steps through the early pipeline that have no dedicated operator
+ * action of their own.
+ *
+ * §23's action set — APPROVE, EDIT, REGENERATE, REJECT, SCHEDULE, UNSCHEDULE,
+ * CANCEL — is about deciding the fate of finished content, so `availableActions`
+ * returns nothing at all for an item in IDEA. These three transitions are
+ * legal in the domain and were only ever driven by scripts and tests, which is
+ * why a real item could be written, briefed, and then stuck with no way
+ * forward.
+ *
+ * Only the steps that nothing else already owns are listed here. The rest of
+ * the pipeline keeps its existing, purpose-built path, and must not be
+ * reachable through this generic one:
+ *
+ *   STRATEGY_READY -> GENERATING  belongs to composing a brief
+ *   GENERATING     -> QA          belongs to pasting the generation back
+ *   QA             -> READY_FOR_REVIEW belongs to the QA gate
+ *   READY_FOR_REVIEW -> APPROVED  belongs to the human review screen (§22)
+ *
+ * NEEDS_REVISION is deliberately absent: it has two legal forward targets
+ * (GENERATING and STRATEGY_READY) and picking one for the operator would be
+ * guessing which kind of revision they meant.
+ */
+const PIPELINE_ADVANCE: Readonly<Partial<Record<ContentState, ContentState>>> =
+  Object.freeze({
+    IDEA: 'RESEARCHING',
+    RESEARCHING: 'RESEARCH_VERIFIED',
+    RESEARCH_VERIFIED: 'STRATEGY_READY',
+  });
+
+export interface PipelineStep {
+  readonly from: ContentState;
+  readonly to: ContentState;
+}
+
+/**
+ * The next pipeline step for an item, or null when its state is served by a
+ * purpose-built action elsewhere.
+ *
+ * Says nothing about whether the move will *succeed* — the guards decide that,
+ * and `advancePipeline` surfaces their refusal. An item in RESEARCH_VERIFIED
+ * with unverified claims still reports STRATEGY_READY as its next step, so the
+ * operator is told why it is blocked rather than shown nothing.
+ */
+export function nextPipelineStep(
+  db: DB,
+  contentItemId: number,
+): PipelineStep | null {
+  const from = currentState(db, contentItemId);
+  const to = PIPELINE_ADVANCE[from];
+  return to === undefined ? null : { from, to };
+}
+
+/**
+ * Advances an item one step along the pipeline.
+ *
+ * A thin wrapper over `moveTo`, which is what actually validates the move,
+ * applies the guards and writes the audit event. The wrapper exists for one
+ * reason: it refuses any target that is not *this* state's registered step, so
+ * a crafted request cannot use it to reach APPROVED, SCHEDULED or anything
+ * else that belongs to a guarded path of its own.
+ */
+export function advancePipeline(
+  db: DB,
+  contentItemId: number,
+  to: ContentState,
+  opts: TransitionOptions = {},
+): ContentState {
+  const step = nextPipelineStep(db, contentItemId);
+
+  if (step === null) {
+    throw new IllegalTransitionError(
+      currentState(db, contentItemId),
+      to,
+      'this state is advanced by a dedicated action, not by the pipeline step',
+    );
+  }
+
+  if (step.to !== to) {
+    throw new IllegalTransitionError(
+      step.from,
+      to,
+      `the next pipeline step from ${step.from} is ${step.to}`,
+    );
+  }
+
+  return moveTo(db, contentItemId, to, opts);
 }
 
 /** Which §23 actions the operator may take right now. */

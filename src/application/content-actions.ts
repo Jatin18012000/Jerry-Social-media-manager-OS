@@ -11,9 +11,16 @@
 import { revalidatePath } from 'next/cache';
 
 import { getDb } from '@/db/runtime';
+import type { ContentState } from '@/domain/content-state';
 import type { ContentFormat, Platform } from '@/domain/content';
 import type { ActionResult } from './action-result';
-import { EditRefusedError, editContent, verifyClaim } from './content';
+import {
+  EditRefusedError,
+  advancePipeline,
+  editContent,
+  nextPipelineStep,
+  verifyClaim,
+} from './content';
 import {
   buildBrief,
   createContentItem,
@@ -234,5 +241,51 @@ export async function editContentFields(
       return { ok: false, message: error.message };
     }
     return fail(error, 'Could not save');
+  }
+}
+
+/**
+ * Advances a content item one step along the early pipeline.
+ *
+ * The transition itself, its guards and its audit event all belong to
+ * `moveTo` — this only carries the operator's intent across the wire and
+ * turns a domain refusal into something readable.
+ *
+ * The target is sent by the client and therefore not trusted:
+ * `advancePipeline` accepts only the one step registered for the item's
+ * current state, so a crafted request cannot use this to reach APPROVED or
+ * SCHEDULED. Those keep their own guarded paths (§22).
+ */
+export async function advanceLifecycle(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const contentItemId = Number(formData.get('contentItemId'));
+  const to = String(formData.get('to') ?? '') as ContentState;
+
+  if (!Number.isInteger(contentItemId)) {
+    return { ok: false, message: 'Missing content item.' };
+  }
+
+  try {
+    const db = getDb();
+    const reached = advancePipeline(db, contentItemId, to, { actor: 'jatin' });
+    const next = nextPipelineStep(db, contentItemId);
+
+    revalidatePath(`/content/${contentItemId}`);
+    revalidatePath('/review');
+    revalidatePath('/');
+
+    return {
+      ok: true,
+      message:
+        next === null
+          ? `Now ${reached}.`
+          : `Now ${reached}. Next: ${next.to}.`,
+    };
+  } catch (error) {
+    // A guard refusal is the interesting case — an unverified claim blocking
+    // STRATEGY_READY is information, not a failure to hide (§16).
+    return fail(error, 'Could not advance');
   }
 }
